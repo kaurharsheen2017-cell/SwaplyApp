@@ -189,11 +189,11 @@ class _FeedScreenState extends State<FeedScreen> {
                 ),
               ),
 
-              // ── Nearby Swaps ─────────────────────────────────────────────
+              // ── Recommended for You ──────────────────────────────────────
               SliverToBoxAdapter(
                 child: Consumer<PostService>(
                   builder: (_, ps, __) => _SectionHeader(
-                    title: 'Nearby Swaps',
+                    title: 'Recommended for You',
                     onSeeAll: () => Navigator.push(context, MaterialPageRoute(
                       builder: (_) => NearbySeeAllScreen(
                         posts: ps.posts.applyFilter(_filter).reversed.toList(),
@@ -208,7 +208,7 @@ class _FeedScreenState extends State<FeedScreen> {
                   builder: (_, ps, __) {
                     final displayPosts =
                         ps.posts.applyFilter(_filter).reversed.toList();
-                    return _NearbySwapRow(
+                    return _RecommendedRow(
                       posts: displayPosts,
                       isLoading: ps.isLoading,
                       isDark: isDark,
@@ -634,14 +634,37 @@ class _ListingCardRow extends StatelessWidget {
   }
 }
 
-class _ListingCard extends StatelessWidget {
+class _ListingCard extends StatefulWidget {
   final PostModel post;
   final bool isDark;
   final VoidCallback onBookmark;
 
   const _ListingCard({required this.post, required this.isDark, required this.onBookmark});
 
+  @override
+  State<_ListingCard> createState() => _ListingCardState();
+}
+
+class _ListingCardState extends State<_ListingCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bkCtrl = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 200));
+  late final Animation<double> _bkScale = TweenSequence([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.38), weight: 50),
+    TweenSequenceItem(tween: Tween(begin: 1.38, end: 1.0),  weight: 50),
+  ]).animate(CurvedAnimation(parent: _bkCtrl, curve: Curves.easeInOut));
+
+  @override
+  void dispose() { _bkCtrl.dispose(); super.dispose(); }
+
+  void _tapBookmark() {
+    HapticFeedback.lightImpact();
+    _bkCtrl.forward(from: 0);
+    widget.onBookmark();
+  }
+
   _PillColors _pillColors(String type) {
+    final isDark = widget.isDark;
     if (isDark) {
       switch (type) {
         case 'barter': return _PillColors(AppColors.darkTagSkillBg, AppColors.darkTagSkillText);
@@ -667,11 +690,15 @@ class _ListingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardBg    = isDark ? AppColors.darkCardBg        : AppColors.surface;
-    final border    = isDark ? AppColors.darkBorder        : AppColors.divider;
-    final textPri   = isDark ? AppColors.darkTextPrimary   : AppColors.textPrimary;
-    final textSec   = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
-    final pill      = _pillColors(post.exchangeType);
+    final isDark  = widget.isDark;
+    final post    = widget.post;
+    final cardBg  = isDark ? AppColors.darkCardBg        : AppColors.surface;
+    final border  = isDark ? AppColors.darkBorder        : AppColors.divider;
+    final textPri = isDark ? AppColors.darkTextPrimary   : AppColors.textPrimary;
+    final textSec = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    final primary = isDark ? AppColors.darkPrimary       : AppColors.primary;
+    final textLt  = isDark ? AppColors.darkTextLight     : AppColors.textLight;
+    final pill    = _pillColors(post.exchangeType);
 
     return GestureDetector(
       onTap: () => Navigator.push(context,
@@ -691,11 +718,33 @@ class _ListingCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              post.exchangeType == 'barter'
-                  ? post.skillOffered : (post.customOffer ?? post.skillOffered),
-              style: GoogleFonts.dmSans(fontSize: 10, color: textSec, fontWeight: FontWeight.w500),
-              maxLines: 1, overflow: TextOverflow.ellipsis,
+            // Skill label + bookmark icon row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    post.exchangeType == 'barter'
+                        ? post.skillOffered : (post.customOffer ?? post.skillOffered),
+                    style: GoogleFonts.dmSans(fontSize: 10, color: textSec, fontWeight: FontWeight.w500),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: _tapBookmark,
+                  child: ScaleTransition(
+                    scale: _bkScale,
+                    child: Icon(
+                      post.isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_outline_rounded,
+                      size: 18,
+                      color: post.isBookmarked ? primary : textLt,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 3),
             Text(post.title,
@@ -737,13 +786,13 @@ class _ListingCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Nearby Swaps — horizontal cards
+//  Recommended for You — horizontal cards (replaces Nearby Swaps)
 // ─────────────────────────────────────────────────────────────────────────────
-class _NearbySwapRow extends StatelessWidget {
+class _RecommendedRow extends StatelessWidget {
   final List<PostModel> posts;
   final bool isLoading, isDark;
 
-  const _NearbySwapRow({required this.posts, required this.isLoading, required this.isDark});
+  const _RecommendedRow({required this.posts, required this.isLoading, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -767,29 +816,51 @@ class _NearbySwapRow extends StatelessWidget {
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: posts.length,
-        itemBuilder: (_, i) => _SwapCard(
-          post: posts[i], isDark: isDark, distanceKm: 1.5 + i * 1.2,
+        itemBuilder: (_, i) => _RecommendedCard(
+          post: posts[i], isDark: isDark,
         ).animate().fadeIn(delay: Duration(milliseconds: i * 70)).slideX(begin: 0.06),
       ),
     );
   }
 }
 
-class _SwapCard extends StatelessWidget {
+class _RecommendedCard extends StatefulWidget {
   final PostModel post;
   final bool isDark;
-  final double distanceKm;
 
-  const _SwapCard({required this.post, required this.isDark, required this.distanceKm});
+  const _RecommendedCard({required this.post, required this.isDark});
+
+  @override
+  State<_RecommendedCard> createState() => _RecommendedCardState();
+}
+
+class _RecommendedCardState extends State<_RecommendedCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bkCtrl = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 200));
+  late final Animation<double> _bkScale = TweenSequence([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.38), weight: 50),
+    TweenSequenceItem(tween: Tween(begin: 1.38, end: 1.0),  weight: 50),
+  ]).animate(CurvedAnimation(parent: _bkCtrl, curve: Curves.easeInOut));
+
+  @override
+  void dispose() { _bkCtrl.dispose(); super.dispose(); }
+
+  void _tapBookmark() {
+    HapticFeedback.lightImpact();
+    _bkCtrl.forward(from: 0);
+    context.read<PostService>().toggleBookmark(widget.post.id);
+  }
 
   _PillColors _tagColors() {
+    final isDark = widget.isDark;
     if (isDark) {
-      switch (post.exchangeType) {
+      switch (widget.post.exchangeType) {
         case 'barter': return _PillColors(AppColors.darkTagBarterBg, AppColors.darkTagBarterText);
         default:       return _PillColors(AppColors.darkTagMoneyBg,  AppColors.darkTagMoneyText);
       }
     } else {
-      switch (post.exchangeType) {
+      switch (widget.post.exchangeType) {
         case 'barter': return _PillColors(const Color(0xFFFFEDD5), const Color(0xFFEA580C));
         default:       return _PillColors(const Color(0xFFD1FAE5), const Color(0xFF059669));
       }
@@ -798,10 +869,14 @@ class _SwapCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark  = widget.isDark;
+    final post    = widget.post;
     final cardBg  = isDark ? AppColors.darkCardBg        : AppColors.surface;
     final border  = isDark ? AppColors.darkBorder        : AppColors.divider;
     final textPri = isDark ? AppColors.darkTextPrimary   : AppColors.textPrimary;
     final textSec = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    final primary = isDark ? AppColors.darkPrimary       : AppColors.primary;
+    final textLt  = isDark ? AppColors.darkTextLight     : AppColors.textLight;
     final tag     = _tagColors();
 
     return GestureDetector(
@@ -821,8 +896,9 @@ class _SwapCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Skill label + bookmark icon
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(post.skillOffered,
@@ -830,11 +906,19 @@ class _SwapCard extends StatelessWidget {
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
                 const SizedBox(width: 4),
-                Row(children: [
-                  Icon(Icons.location_on_rounded, size: 10, color: textSec),
-                  Text('${distanceKm.toStringAsFixed(1)} km',
-                      style: GoogleFonts.dmSans(fontSize: 10, color: textSec, fontWeight: FontWeight.w500)),
-                ]),
+                GestureDetector(
+                  onTap: _tapBookmark,
+                  child: ScaleTransition(
+                    scale: _bkScale,
+                    child: Icon(
+                      post.isBookmarked
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_outline_rounded,
+                      size: 18,
+                      color: post.isBookmarked ? primary : textLt,
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 3),

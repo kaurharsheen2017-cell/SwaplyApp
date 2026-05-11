@@ -340,10 +340,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ).animate().fadeIn(delay: 180.ms),
             ),
 
-            // ── Nearby Swaps ───────────────────────────────────────────────
+            // ── Recommended for You ────────────────────────────────────────
             SliverToBoxAdapter(
               child: _SectionHeader(
-                title: 'Nearby Swaps',
+                title: 'Recommended for You',
                 isDark: isDark,
                 textPri: _textPri(isDark),
                 primary: _primary(isDark),
@@ -605,76 +605,13 @@ class _SeeAllScreenState extends State<_SeeAllScreen> {
                     final offer = post.exchangeType == 'barter'
                         ? post.skillOffered
                         : (post.customOffer ?? post.skillOffered);
-
-                    return GestureDetector(
-                      onTap: () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => PostDetailScreen(post: post))),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cardBg,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: border, width: 1),
-                          boxShadow: isDark
-                              ? null
-                              : [BoxShadow(color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 8, offset: const Offset(0, 2))],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // offer label
-                            Text(offer,
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 10, color: textSec, fontWeight: FontWeight.w500),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text('for', style: GoogleFonts.dmSans(fontSize: 10, color: textLt)),
-                            const SizedBox(height: 2),
-                            // title
-                            Text(post.title,
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 13, fontWeight: FontWeight.w700,
-                                    color: textPri, height: 1.3),
-                                maxLines: 2, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 8),
-                            // avatar + username
-                            Row(children: [
-                              AvatarWidget(
-                                  avatarUrl: post.profile?.avatarUrl,
-                                  username: post.profile?.username ?? '',
-                                  radius: 9),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(post.profile?.username ?? 'User',
-                                    style: GoogleFonts.dmSans(fontSize: 10, color: textSec),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                            ]),
-                            const SizedBox(height: 6),
-                            // rating
-                            Row(children: [
-                              const Icon(Icons.star_rounded, color: Color(0xFFFACC15), size: 12),
-                              const SizedBox(width: 2),
-                              Text(
-                                (post.profile?.averageRating ?? 0.0).toStringAsFixed(1),
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 11, fontWeight: FontWeight.w600, color: textPri),
-                              ),
-                            ]),
-                            const SizedBox(height: 8),
-                            // pill
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                  color: pill.bg, borderRadius: BorderRadius.circular(20)),
-                              child: Text(pill.label,
-                                  style: GoogleFonts.dmSans(
-                                      fontSize: 9.5, fontWeight: FontWeight.w700, color: pill.text)),
-                            ),
-                          ],
-                        ),
-                      ),
+                    return _ExploreBookmarkCard(
+                      key: ValueKey(post.id),
+                      post: post, isDark: isDark,
+                      cardBg: cardBg, border: border,
+                      textPri: textPri, textSec: textSec,
+                      textLt: textLt, primary: primary,
+                      pill: pill, offer: offer,
                     ).animate().fadeIn(delay: Duration(milliseconds: i * 35));
                   },
                 );
@@ -715,7 +652,7 @@ class _NearbyAllScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: textPri, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Nearby Swaps',
+        title: Text('Recommended for You',
             style: GoogleFonts.dmSans(color: textPri, fontSize: 17, fontWeight: FontWeight.w700)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -727,9 +664,9 @@ class _NearbyAllScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.location_off_rounded, size: 56, color: textLt),
+                  Icon(Icons.recommend_rounded, size: 56, color: textLt),
                   const SizedBox(height: 12),
-                  Text('No nearby swaps yet',
+                  Text('No recommendations yet',
                       style: GoogleFonts.dmSans(color: textSec, fontSize: 15)),
                 ],
               ),
@@ -1114,6 +1051,7 @@ class _PopularCardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = isDark ? AppColors.darkPrimary : AppColors.primary;
     if (posts.isEmpty) return const SizedBox(height: 168);
     return SizedBox(
       height: 168,
@@ -1129,64 +1067,14 @@ class _PopularCardRow extends StatelessWidget {
               ? post.skillOffered
               : (post.customOffer ?? post.skillOffered);
 
-          return GestureDetector(
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => PostDetailScreen(post: post))),
-            child: Container(
-              width: 148,
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: border, width: 1),
-                boxShadow: isDark
-                    ? null
-                    : [BoxShadow(color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8, offset: const Offset(0, 2))],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(offer,
-                      style: GoogleFonts.dmSans(fontSize: 10, color: textSec, fontWeight: FontWeight.w500),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text('for', style: GoogleFonts.dmSans(fontSize: 10, color: textLt)),
-                  const SizedBox(height: 2),
-                  Text(post.title,
-                      style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700,
-                          color: textPri, height: 1.3),
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 6),
-                  Row(children: [
-                    AvatarWidget(avatarUrl: post.profile?.avatarUrl,
-                        username: post.profile?.username ?? '', radius: 9),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(post.profile?.username ?? 'User',
-                          style: GoogleFonts.dmSans(fontSize: 10, color: textSec),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                  ]),
-                  const SizedBox(height: 5),
-                  Row(children: [
-                    const Icon(Icons.star_rounded, color: Color(0xFFFACC15), size: 12),
-                    const SizedBox(width: 2),
-                    Text((post.profile?.averageRating ?? 0.0).toStringAsFixed(1),
-                        style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: textPri)),
-                  ]),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: pill.bg, borderRadius: BorderRadius.circular(20)),
-                    child: Text(pill.label,
-                        style: GoogleFonts.dmSans(fontSize: 9.5, fontWeight: FontWeight.w700, color: pill.text)),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(delay: Duration(milliseconds: i * 55)),
-          );
+          return _ExploreBookmarkCard(
+            key: ValueKey(post.id),
+            post: post, isDark: isDark,
+            cardBg: cardBg, border: border,
+            textPri: textPri, textSec: textSec,
+            textLt: textLt, primary: primary,
+            pill: pill, offer: offer,
+          ).animate().fadeIn(delay: Duration(milliseconds: i * 55));
         },
       ),
     );
@@ -1249,9 +1137,135 @@ class _TrendingSkillsRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Nearby Swap Tile
+//  Shared bookmark-aware horizontal card  (Popular + SeeAll grid)
 // ─────────────────────────────────────────────────────────────────────────────
-class _NearbySwapTile extends StatelessWidget {
+class _ExploreBookmarkCard extends StatefulWidget {
+  final PostModel post;
+  final bool isDark;
+  final Color cardBg, border, textPri, textSec, textLt, primary;
+  final _PillStyle pill;
+  final String offer;
+
+  const _ExploreBookmarkCard({
+    super.key,
+    required this.post,    required this.isDark,
+    required this.cardBg,  required this.border,
+    required this.textPri, required this.textSec,
+    required this.textLt,  required this.primary,
+    required this.pill,    required this.offer,
+  });
+
+  @override
+  State<_ExploreBookmarkCard> createState() => _ExploreBookmarkCardState();
+}
+
+class _ExploreBookmarkCardState extends State<_ExploreBookmarkCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bkCtrl = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 200));
+  late final Animation<double> _bkScale = TweenSequence([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.40), weight: 50),
+    TweenSequenceItem(tween: Tween(begin: 1.40, end: 1.0), weight: 50),
+  ]).animate(CurvedAnimation(parent: _bkCtrl, curve: Curves.easeInOut));
+
+  @override
+  void dispose() { _bkCtrl.dispose(); super.dispose(); }
+
+  void _tapBookmark() {
+    HapticFeedback.lightImpact();
+    _bkCtrl.forward(from: 0);
+    context.read<PostService>().toggleBookmark(widget.post.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget;
+    return GestureDetector(
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => PostDetailScreen(post: p.post))),
+      child: Container(
+        width: 148,
+        margin: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: p.cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: p.border, width: 1),
+          boxShadow: p.isDark ? null : [BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Offer label + bookmark icon
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Text(p.offer,
+                    style: GoogleFonts.dmSans(
+                        fontSize: 10, color: p.textSec, fontWeight: FontWeight.w500),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: _tapBookmark,
+                child: ScaleTransition(
+                  scale: _bkScale,
+                  child: Icon(
+                    p.post.isBookmarked
+                        ? Icons.bookmark_rounded
+                        : Icons.bookmark_outline_rounded,
+                    size: 18,
+                    color: p.post.isBookmarked ? p.primary : p.textLt,
+                  ),
+                ),
+              ),
+            ]),
+            Text('for', style: GoogleFonts.dmSans(fontSize: 10, color: p.textLt)),
+            const SizedBox(height: 2),
+            Text(p.post.title,
+                style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700,
+                    color: p.textPri, height: 1.3),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 6),
+            Row(children: [
+              AvatarWidget(avatarUrl: p.post.profile?.avatarUrl,
+                  username: p.post.profile?.username ?? '', radius: 9),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(p.post.profile?.username ?? 'User',
+                    style: GoogleFonts.dmSans(fontSize: 10, color: p.textSec),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ]),
+            const SizedBox(height: 5),
+            Row(children: [
+              const Icon(Icons.star_rounded, color: Color(0xFFFACC15), size: 12),
+              const SizedBox(width: 2),
+              Text((p.post.profile?.averageRating ?? 0.0).toStringAsFixed(1),
+                  style: GoogleFonts.dmSans(
+                      fontSize: 11, fontWeight: FontWeight.w600, color: p.textPri)),
+            ]),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: p.pill.bg, borderRadius: BorderRadius.circular(20)),
+              child: Text(p.pill.label,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 9.5, fontWeight: FontWeight.w700, color: p.pill.text)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Recommended Tile — list row with bookmark icon on trailing side
+// ─────────────────────────────────────────────────────────────────────────────
+class _NearbySwapTile extends StatefulWidget {
   final PostModel post;
   final bool isDark;
   final Color cardBg, border, textPri, textSec, textLt, primary;
@@ -1265,78 +1279,102 @@ class _NearbySwapTile extends StatelessWidget {
     required this.distanceKm,
   });
 
+  @override
+  State<_NearbySwapTile> createState() => _NearbySwapTileState();
+}
+
+class _NearbySwapTileState extends State<_NearbySwapTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bkCtrl = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 200));
+  late final Animation<double> _bkScale = TweenSequence([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.40), weight: 50),
+    TweenSequenceItem(tween: Tween(begin: 1.40, end: 1.0), weight: 50),
+  ]).animate(CurvedAnimation(parent: _bkCtrl, curve: Curves.easeInOut));
+
+  @override
+  void dispose() { _bkCtrl.dispose(); super.dispose(); }
+
+  void _tapBookmark() {
+    HapticFeedback.lightImpact();
+    _bkCtrl.forward(from: 0);
+    context.read<PostService>().toggleBookmark(widget.post.id);
+  }
+
   _PillStyle _pill() {
-    if (isDark) {
-      switch (post.exchangeType) {
-        case 'barter': return _PillStyle(AppColors.darkTagSkillBg,   AppColors.darkTagSkillText,   'Barter');
-        case 'custom': return _PillStyle(AppColors.darkTagMoneyBg,   AppColors.darkTagMoneyText,   'Money');
-        default:       return _PillStyle(AppColors.darkTagTreatsBg,  AppColors.darkTagTreatsText,  'Treats');
-      }
-    } else {
-      switch (post.exchangeType) {
-        case 'barter': return _PillStyle(const Color(0xFFEDE9FE), const Color(0xFF5B4FE8), 'Barter');
-        case 'custom': return _PillStyle(const Color(0xFFD1FAE5), const Color(0xFF059669), 'Money');
-        default:       return _PillStyle(const Color(0xFFFEF3C7), const Color(0xFFD97706), 'Treats');
-      }
+    final isDark = widget.isDark;
+    switch (widget.post.exchangeType) {
+      case 'barter': return _PillStyle(
+          isDark ? AppColors.darkTagSkillBg  : const Color(0xFFEDE9FE),
+          isDark ? AppColors.darkTagSkillText : const Color(0xFF5B4FE8),
+          'Barter');
+      case 'custom': return _PillStyle(
+          isDark ? AppColors.darkTagMoneyBg  : const Color(0xFFD1FAE5),
+          isDark ? AppColors.darkTagMoneyText : const Color(0xFF059669),
+          'Money');
+      default: return _PillStyle(
+          isDark ? AppColors.darkTagTreatsBg  : const Color(0xFFFEF3C7),
+          isDark ? AppColors.darkTagTreatsText : const Color(0xFFD97706),
+          'Treats');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final p    = widget;
     final pill = _pill();
     return GestureDetector(
       onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => PostDetailScreen(post: post))),
+          MaterialPageRoute(builder: (_) => PostDetailScreen(post: p.post))),
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: cardBg,
+          color: p.cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: border, width: 1),
-          boxShadow: isDark
-              ? null
-              : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
+          border: Border.all(color: p.border, width: 1),
+          boxShadow: p.isDark ? null : [BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6, offset: const Offset(0, 2))],
         ),
         child: Row(children: [
-          AvatarWidget(avatarUrl: post.profile?.avatarUrl, username: post.profile?.username ?? '', radius: 22),
+          AvatarWidget(avatarUrl: p.post.profile?.avatarUrl,
+              username: p.post.profile?.username ?? '', radius: 22),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(post.title,
-                    style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: textPri),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Row(children: [
-                  Text(post.profile?.username ?? 'User',
-                      style: GoogleFonts.dmSans(fontSize: 11, color: textSec)),
-                  Text(' · ', style: TextStyle(color: textLt, fontSize: 11)),
-                  Icon(Icons.location_on_rounded, size: 10, color: textLt),
-                  Text('${distanceKm.toStringAsFixed(1)} km',
-                      style: GoogleFonts.dmSans(fontSize: 11, color: textLt)),
-                ]),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.post.title,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 13, fontWeight: FontWeight.w700, color: p.textPri),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Text(p.post.profile?.username ?? 'User',
+                  style: GoogleFonts.dmSans(fontSize: 11, color: p.textSec)),
+            ]),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: pill.bg, borderRadius: BorderRadius.circular(20)),
-                child: Text(pill.label,
-                    style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w700, color: pill.text)),
+          const SizedBox(width: 8),
+          // Pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: pill.bg, borderRadius: BorderRadius.circular(20)),
+            child: Text(pill.label,
+                style: GoogleFonts.dmSans(
+                    fontSize: 10, fontWeight: FontWeight.w700, color: pill.text)),
+          ),
+          const SizedBox(width: 8),
+          // Bookmark icon
+          GestureDetector(
+            onTap: _tapBookmark,
+            child: ScaleTransition(
+              scale: _bkScale,
+              child: Icon(
+                p.post.isBookmarked
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_outline_rounded,
+                size: 20,
+                color: p.post.isBookmarked ? p.primary : p.textLt,
               ),
-              const SizedBox(height: 4),
-              Row(children: [
-                const Icon(Icons.star_rounded, color: Color(0xFFFACC15), size: 12),
-                const SizedBox(width: 2),
-                Text((post.profile?.averageRating ?? 0.0).toStringAsFixed(1),
-                    style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: textPri)),
-              ]),
-            ],
+            ),
           ),
         ]),
       ),
@@ -1345,7 +1383,7 @@ class _NearbySwapTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Nearby Swap Shimmer
+//  Shimmer placeholder for _NearbySwapTile
 // ─────────────────────────────────────────────────────────────────────────────
 class _NearbySwapTileShimmer extends StatelessWidget {
   final bool isDark;
@@ -1353,18 +1391,24 @@ class _NearbySwapTileShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = isDark ? const Color(0xFF252540) : const Color(0xFFEEEEEE);
+    final shimmerColor = isDark
+        ? AppColors.darkSurfaceVariant
+        : const Color(0xFFF0F0F0);
     return Container(
-      height: 60,
-      decoration: BoxDecoration(color: base, borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      height: 64,
+      decoration: BoxDecoration(
+        color: shimmerColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Search Result Tile
+//  Search Result Tile — row card with bookmark icon
 // ─────────────────────────────────────────────────────────────────────────────
-class _SearchResultTile extends StatelessWidget {
+class _SearchResultTile extends StatefulWidget {
   final PostModel post;
   final bool isDark;
   final Color cardBg, border, textPri, textSec, textLt, primary;
@@ -1377,39 +1421,76 @@ class _SearchResultTile extends StatelessWidget {
   });
 
   @override
+  State<_SearchResultTile> createState() => _SearchResultTileState();
+}
+
+class _SearchResultTileState extends State<_SearchResultTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bkCtrl = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 200));
+  late final Animation<double> _bkScale = TweenSequence([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.40), weight: 50),
+    TweenSequenceItem(tween: Tween(begin: 1.40, end: 1.0), weight: 50),
+  ]).animate(CurvedAnimation(parent: _bkCtrl, curve: Curves.easeInOut));
+
+  @override
+  void dispose() { _bkCtrl.dispose(); super.dispose(); }
+
+  void _tapBookmark() {
+    HapticFeedback.lightImpact();
+    _bkCtrl.forward(from: 0);
+    context.read<PostService>().toggleBookmark(widget.post.id);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final p = widget;
     return GestureDetector(
       onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => PostDetailScreen(post: post))),
+          MaterialPageRoute(builder: (_) => PostDetailScreen(post: p.post))),
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: cardBg,
+          color: p.cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: border, width: 1),
-          boxShadow: isDark
-              ? null
-              : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
+          border: Border.all(color: p.border, width: 1),
+          boxShadow: p.isDark ? null : [BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6, offset: const Offset(0, 2))],
         ),
         child: Row(children: [
-          AvatarWidget(avatarUrl: post.profile?.avatarUrl, username: post.profile?.username ?? '', radius: 20),
+          AvatarWidget(avatarUrl: p.post.profile?.avatarUrl,
+              username: p.post.profile?.username ?? '', radius: 20),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(post.title,
-                    style: GoogleFonts.dmSans(fontSize: 13.5, fontWeight: FontWeight.w700, color: textPri),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(post.profile?.username ?? 'User',
-                    style: GoogleFonts.dmSans(fontSize: 11, color: textSec)),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.post.title,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 13.5, fontWeight: FontWeight.w700, color: p.textPri),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Text(p.post.profile?.username ?? 'User',
+                  style: GoogleFonts.dmSans(fontSize: 11, color: p.textSec)),
+            ]),
           ),
           const SizedBox(width: 8),
-          Icon(Icons.arrow_forward_ios_rounded, size: 13, color: textLt),
+          // Bookmark icon
+          GestureDetector(
+            onTap: _tapBookmark,
+            child: ScaleTransition(
+              scale: _bkScale,
+              child: Icon(
+                p.post.isBookmarked
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_outline_rounded,
+                size: 20,
+                color: p.post.isBookmarked ? p.primary : p.textLt,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.arrow_forward_ios_rounded, size: 13, color: p.textLt),
         ]),
       ),
     );

@@ -30,7 +30,7 @@ class ThemeProvider extends ChangeNotifier {
     if (stored != null) {
       _appThemeMode = AppThemeMode.values.firstWhere(
         (e) => e.name == stored,
-        orElse: () => AppThemeMode.system,
+        orElse: () => AppThemeMode.light,
       );
       notifyListeners();
     }

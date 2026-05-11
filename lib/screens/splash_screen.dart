@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../utils/app_theme.dart';
-import 'auth/login_screen.dart';
+import 'auth/onboarding_screen.dart';
 import 'home/main_nav_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -45,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, a1, __) =>
-            auth.isLoggedIn ? const MainNavScreen() : const LoginScreen(),
+            auth.isLoggedIn ? const MainNavScreen() : const OnboardingScreen(),
         transitionsBuilder: (_, a1, __, child) =>
             FadeTransition(opacity: a1, child: child),
         transitionDuration: const Duration(milliseconds: 400),
