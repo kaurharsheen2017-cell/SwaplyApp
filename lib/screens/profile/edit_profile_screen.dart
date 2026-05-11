@@ -40,33 +40,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _uploadingPhoto = false;
   String? _newAvatarUrl;
 
-  @override
-  void initState() {
-    super.initState();
-    final p           = context.read<AuthService>().currentProfile;
-    _nameCtrl          = TextEditingController(text: p?.fullName  ?? '');
-    _usernameCtrl      = TextEditingController(text: p?.username  ?? '');
-    _bioCtrl           = TextEditingController(text: p?.bio       ?? '');
-    _skillsOfferedCtrl = TextEditingController(
-        text: p?.skillsOffered.join(', ') ?? '');
-    _skillsWantedCtrl  = TextEditingController(
-        text: p?.skillsWanted.join(', ')  ?? '');
-    // Two empty link slots by default
-    _linkCtrs.add(TextEditingController());
+@override
+void initState() {
+  super.initState();
+
+  final p = context.read<AuthService>().currentProfile;
+
+  _nameCtrl = TextEditingController(text: p?.fullName ?? '');
+  _usernameCtrl = TextEditingController(text: p?.username ?? '');
+  _bioCtrl = TextEditingController(text: p?.bio ?? '');
+
+  _skillsOfferedCtrl = TextEditingController(
+    text: p?.skillsOffered.join(', ') ?? '',
+  );
+
+  _skillsWantedCtrl = TextEditingController(
+    text: p?.skillsWanted.join(', ') ?? '',
+  );
+
+  final existingLinks = p?.links ?? [];
+
+  if (existingLinks.isNotEmpty) {
+    for (final link in existingLinks) {
+      _linkCtrs.add(TextEditingController(text: link));
+    }
+  } else {
     _linkCtrs.add(TextEditingController());
   }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _usernameCtrl.dispose();
-    _bioCtrl.dispose();
-    _skillsOfferedCtrl.dispose();
-    _skillsWantedCtrl.dispose();
-    for (final c in _linkCtrs) c.dispose();
-    super.dispose();
-  }
-
+}
   // ── Avatar upload ───────────────────────────────────────────────────────────
   Future<void> _pickAvatar() async {
     final picked = await ImagePicker().pickImage(
@@ -95,26 +96,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       v.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
   // ── Save ────────────────────────────────────────────────────────────────────
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
+Future<void> _save() async {
+  if (!_formKey.currentState!.validate()) return;
+  setState(() => _saving = true);
 
-    final ok = await context.read<AuthService>().updateProfile(
-      fullName:      _nameCtrl.text.trim(),
-      username:      _usernameCtrl.text.trim(),
-      bio:           _bioCtrl.text.trim(),
-      skillsOffered: _csv(_skillsOfferedCtrl.text),
-      skillsWanted:  _csv(_skillsWantedCtrl.text),
-      avatarUrl:     _newAvatarUrl,
-    );
+  final ok = await context.read<AuthService>().updateProfile(
+    fullName:      _nameCtrl.text.trim(),
+    username:      _usernameCtrl.text.trim(),
+    bio:           _bioCtrl.text.trim(),
+    skillsOffered: _csv(_skillsOfferedCtrl.text),
+    skillsWanted:  _csv(_skillsWantedCtrl.text),
+    avatarUrl:     _newAvatarUrl,
+    links: _linkCtrs
+        .map((e) => e.text.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(),
+  );
 
-    setState(() => _saving = false);
-    if (ok && mounted) {
-      _snack('Profile saved!');
-      Navigator.pop(context);
-    }
+  setState(() => _saving = false);
+  if (ok && mounted) {
+    _snack('Profile saved!');
+    Navigator.pop(context);
   }
-
+}
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: GoogleFonts.dmSans(color: Colors.white)),

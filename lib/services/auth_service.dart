@@ -183,62 +183,94 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> updateProfile({
-    String? fullName,
-    String? username,
-    String? bio,
-    String? campus,
-    List<String>? skillsOffered,
-    List<String>? skillsWanted,
-    String? avatarUrl,
-  }) async {
-    if (currentUser == null) return false;
-    _setLoading(true);
-    try {
-      final updates = <String, dynamic>{
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-      if (fullName != null && fullName.isNotEmpty) {
-        updates['full_name'] = fullName;
-      }
-      if (username != null && username.isNotEmpty) {
-        updates['username'] = username;
-      }
-      if (bio != null) updates['bio'] = bio;
-      if (campus != null) updates['campus'] = campus;
-      if (skillsOffered != null) updates['skills_offered'] = skillsOffered;
-      if (skillsWanted != null) updates['skills_wanted'] = skillsWanted;
-      if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
+  String? fullName,
+  String? username,
+  String? bio,
+  String? campus,
+  List<String>? skillsOffered,
+  List<String>? skillsWanted,
+  List<String>? links,
+  String? avatarUrl,
+}) async {
+  if (currentUser == null) return false;
+  _setLoading(true);
 
-      final existing = await supabase.from('profiles').select('id').eq('id', currentUser!.id);
-      if (existing.isEmpty) {
-        updates['id'] = currentUser!.id;
-        updates['username'] = currentUser!.userMetadata?['username'] ?? currentUser!.id.substring(0, 8);
-        await supabase.from('profiles').insert(updates);
-      } else {
-        await supabase.from('profiles').update(updates).eq('id', currentUser!.id);
-      }
+  try {
+    final updates = <String, dynamic>{
+      'updated_at': DateTime.now().toIso8601String(),
+    };
 
-      await fetchProfile();
-      _setLoading(false);
-      return true;
-    } catch (e) {
-      debugPrint('Profile update error: $e');
-      _setError('Failed to update profile.');
-      _setLoading(false);
-      return false;
+    if (fullName != null && fullName.isNotEmpty) {
+      updates['full_name'] = fullName;
     }
-  }
 
-  Future<ProfileModel?> getProfileById(String userId) async {
-    try {
-      final data = await supabase
+    if (username != null && username.isNotEmpty) {
+      updates['username'] = username;
+    }
+
+    if (bio != null) updates['bio'] = bio;
+    if (campus != null) updates['campus'] = campus;
+
+    if (skillsOffered != null) {
+      updates['skills_offered'] = skillsOffered;
+    }
+
+    if (skillsWanted != null) {
+      updates['skills_wanted'] = skillsWanted;
+    }
+
+    if (links != null) {
+      updates['links'] = links;
+    }
+
+    if (avatarUrl != null) {
+      updates['avatar_url'] = avatarUrl;
+    }
+
+    final existing = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', currentUser!.id);
+
+    if (existing.isEmpty) {
+      updates['id'] = currentUser!.id;
+
+      updates['username'] =
+          currentUser!.userMetadata?['username'] ??
+              currentUser!.id.substring(0, 8);
+
+      await supabase.from('profiles').insert(updates);
+    } else {
+      await supabase
           .from('profiles')
-          .select()
-          .eq('id', userId)
-          .single();
-      return ProfileModel.fromJson(data);
-    } catch (e) {
-      return null;
+          .update(updates)
+          .eq('id', currentUser!.id);
     }
+
+    await fetchProfile();
+
+    _setLoading(false);
+    return true;
+
+  } catch (e) {
+    debugPrint('Profile update error: $e');
+    _setError('Failed to update profile.');
+    _setLoading(false);
+    return false;
   }
+}
+Future<ProfileModel?> getProfileById(String userId) async {
+  try {
+    final data = await supabase
+        .from('profiles')
+        .select()
+        .eq('id', userId)
+        .single();
+
+    return ProfileModel.fromJson(data);
+  } catch (e) {
+    debugPrint('Get profile error: $e');
+    return null;
+  }
+}
 }

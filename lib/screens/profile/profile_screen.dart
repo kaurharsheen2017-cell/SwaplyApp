@@ -151,7 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             // ══════════════════════════════════════════════════════════════
             SliverToBoxAdapter(
               child: _LinksSection(
-                links: const [],   // no links field in model yet
+                links: profile?.links ?? [],   // no links field in model yet
                 isDark: isDark, cardBg: cardBg, tPri: tPri,
                 tSec: tSec, border: border,
                 onManage: () => Navigator.push(context,

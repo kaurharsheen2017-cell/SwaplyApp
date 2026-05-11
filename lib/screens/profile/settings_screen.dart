@@ -165,7 +165,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.light;
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
     final bg      = isDark ? AppColors.darkBackground    : AppColors.background;
     final cardBg  = isDark ? AppColors.darkCardBg        : AppColors.surface;
     final border  = isDark ? AppColors.darkBorder        : AppColors.divider;
@@ -415,7 +415,7 @@ class _ThemeToggleCard extends StatelessWidget {
                 mode: AppThemeMode.system, current: current,
                 primary: primary, tPri: tPri, tSec: tSec, isDark: isDark,
                 onTap: () { HapticFeedback.selectionClick();
-                  context.read<ThemeProvider>().setTheme(AppThemeMode.light); }),
+                  context.read<ThemeProvider>().setTheme(AppThemeMode.system); }),
             _Seg(label: 'Dark',   icon: Icons.dark_mode_rounded,
                 mode: AppThemeMode.dark,   current: current,
                 primary: primary, tPri: tPri, tSec: tSec, isDark: isDark,

@@ -1,3 +1,4 @@
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -11,6 +12,7 @@ import '../../utils/app_theme.dart';
 import '../../widgets/avatar_widget.dart';
 import 'rate_swap_screen.dart';
 import '../../screens/profile/user_profile_screen.dart' as profile_screen;
+
 class ChatScreen extends StatefulWidget {
   final ChatModel chat;
   const ChatScreen({super.key, required this.chat});
@@ -20,9 +22,9 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final _msgCtrl    = TextEditingController();
+  final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  bool _isSending   = false;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -34,9 +36,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    context.read<ChatService>().unsubscribeFromChat();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
-    context.read<ChatService>().unsubscribeFromChat();
     super.dispose();
   }
 
@@ -55,46 +57,79 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMessage() async {
     final text = _msgCtrl.text.trim();
     if (text.isEmpty) return;
+
     _msgCtrl.clear();
+
     setState(() => _isSending = true);
-    await context.read<ChatService>().sendMessage(
-      chatId: widget.chat.id,
-      content: text,
-    );
-    setState(() => _isSending = false);
-    _scrollToBottom();
+
+    final success = await context.read<ChatService>().sendMessage(
+          chatId: widget.chat.id,
+          content: text,
+        );
+
+    if (success) {
+      await context.read<ChatService>().fetchMessages(widget.chat.id);
+      _scrollToBottom();
+    }
+
+    if (mounted) {
+      setState(() => _isSending = false);
+    }
   }
 
   Future<void> _pickAndSendImage() async {
     final picker = ImagePicker();
+
     final picked = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 70);
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+
     if (picked == null) return;
+
     setState(() => _isSending = true);
+
     final cs = context.read<ChatService>();
+
     final url = await cs.uploadChatImage(File(picked.path));
+
     if (url != null) {
-      await cs.sendMessage(
-          chatId: widget.chat.id, imageUrl: url, messageType: 'image');
-      _scrollToBottom();
+      final success = await cs.sendMessage(
+        chatId: widget.chat.id,
+        imageUrl: url,
+        messageType: 'image',
+      );
+
+      if (success) {
+        await cs.fetchMessages(widget.chat.id);
+        _scrollToBottom();
+      }
     }
-    setState(() => _isSending = false);
+
+    if (mounted) {
+      setState(() => _isSending = false);
+    }
   }
 
   Future<void> _confirmSwap() async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg  = isDark ? AppColors.darkCardBg : Colors.white;
-    final textPri = isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
-    final textSec = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    final cardBg = isDark ? AppColors.darkCardBg : Colors.white;
+    final textPri =
+        isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+    final textSec =
+        isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: cardBg,
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: Text('Confirm Swap 🤝',
-            style: TextStyle(color: textPri)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Confirm Swap 🤝',
+          style: TextStyle(color: textPri),
+        ),
         content: Text(
           'Confirm a skill swap with '
           '${widget.chat.otherUser?.fullName ?? widget.chat.otherUser?.username}?\n\n'
@@ -104,50 +139,71 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: textSec)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: textSec),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success),
-            child: const Text('Confirm',
-                style: TextStyle(color: Colors.white)),
+              backgroundColor: AppColors.success,
+            ),
+            child: const Text(
+              'Confirm',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
+
     if (confirm == true && mounted) {
       final swap = await context.read<ChatService>().confirmSwap(
-        chatId: widget.chat.id,
-        otherUserId: widget.chat.otherUser?.id ?? '',
-        postId: widget.chat.postId,
-      );
+            chatId: widget.chat.id,
+            otherUserId: widget.chat.otherUser?.id ?? '',
+            postId: widget.chat.postId,
+          );
+
       if (swap != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Swap confirmed! 🎉'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Swap confirmed! 🎉'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+
         setState(() {});
       }
     }
   }
 
   Future<void> _showCompleteSwapDialog() async {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
-    final cardBg  = isDark ? AppColors.darkCardBg : Colors.white;
-    final textPri = isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
-    final textSec = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.darkCardBg : Colors.white;
+    final textPri =
+        isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+    final textSec =
+        isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
 
     final swaps = await context.read<ChatService>().fetchUserSwaps();
-    final swap  = swaps.firstWhere(
+
+    final swap = swaps.firstWhere(
       (s) => s.chatId == widget.chat.id && s.status == 'pending',
       orElse: () => SwapModel(
-          id: '', chatId: '', initiatorId: '', receiverId: '',
-          status: 'pending', createdAt: DateTime.now()),
+        id: '',
+        chatId: '',
+        initiatorId: '',
+        receiverId: '',
+        status: 'pending',
+        createdAt: DateTime.now(),
+      ),
     );
+
     if (swap.id.isEmpty || !mounted) return;
 
     final confirm = await showDialog<bool>(
@@ -155,9 +211,12 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: cardBg,
         shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: Text('Mark Swap as Complete?',
-            style: TextStyle(color: textPri)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Mark Swap as Complete?',
+          style: TextStyle(color: textPri),
+        ),
         content: Text(
           'Confirm that the skill swap has been completed successfully.',
           style: TextStyle(color: textSec),
@@ -165,31 +224,44 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(color: textSec)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: textSec),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success),
-            child: const Text('Complete',
-                style: TextStyle(color: Colors.white)),
+              backgroundColor: AppColors.success,
+            ),
+            child: const Text(
+              'Complete',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
+
     if (confirm == true && mounted) {
       await context
           .read<ChatService>()
           .markSwapCompleted(swap.id, widget.chat.id);
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text(
-              'Swap marked as complete! 🎉 Please rate your experience.'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Swap marked as complete! 🎉 Please rate your experience.',
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+
         setState(() {});
       }
     }
@@ -197,10 +269,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _navigateToProfile() {
     final otherId = widget.chat.otherUser?.id ?? '';
+
     if (otherId.isEmpty) return;
-    // Navigate without importing UserProfileScreen to avoid circular imports.
-    // user_profile_screen.dart imports chat_screen.dart (to start chats),
-    // so chat_screen.dart must NOT import user_profile_screen.dart.
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -211,222 +282,256 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark       = Theme.of(context).brightness == Brightness.dark;
-    final bgColor      = isDark ? AppColors.darkBackground    : AppColors.background;
-    final inputBarBg   = isDark ? AppColors.darkCardBg        : AppColors.surface;
-    final inputFieldBg = isDark ? AppColors.darkSearchBg      : AppColors.background;
-    final textPri      = isDark ? AppColors.darkTextPrimary   : AppColors.textPrimary;
-    final textLt       = isDark ? AppColors.darkTextLight     : AppColors.textLight;
-    final textSec      = isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
-    final bubbleBg     = isDark ? AppColors.darkSurfaceVariant: AppColors.surfaceVariant;
-    final borderTop    = isDark ? AppColors.darkBorder        : AppColors.divider;
-    final primaryColor = isDark ? AppColors.darkPrimary       : AppColors.primary;
-    final auth         = context.watch<AuthService>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bgColor =
+        isDark ? AppColors.darkBackground : AppColors.background;
+
+    final inputBarBg =
+        isDark ? AppColors.darkCardBg : AppColors.surface;
+
+    final inputFieldBg =
+        isDark ? AppColors.darkSearchBg : AppColors.background;
+
+    final textPri =
+        isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+
+    final textLt =
+        isDark ? AppColors.darkTextLight : AppColors.textLight;
+
+    final textSec =
+        isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
+
+    final bubbleBg =
+        isDark ? AppColors.darkSurfaceVariant : AppColors.surfaceVariant;
+
+    final borderTop =
+        isDark ? AppColors.darkBorder : AppColors.divider;
+
+    final primaryColor =
+        isDark ? AppColors.darkPrimary : AppColors.primary;
+
+    final auth = context.watch<AuthService>();
+
     final currentUserId = auth.currentUser?.id ?? '';
 
     return Scaffold(
       backgroundColor: bgColor,
       body: Column(
         children: [
-          // ── Gradient header ───────────────────────────────────────────
           Container(
-            decoration:
-                const BoxDecoration(gradient: AppColors.primaryGradient),
+            decoration: const BoxDecoration(
+              gradient: AppColors.primaryGradient,
+            ),
             child: SafeArea(
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 8),
-                child: Row(children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 20),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  GestureDetector(
-                    onTap: _navigateToProfile,
-                    child: Row(children: [
-                      AvatarWidget(
-                        avatarUrl: widget.chat.otherUser?.avatarUrl,
-                        username: widget.chat.otherUser?.username ?? '',
-                        radius: 20,
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      onPressed: () => Navigator.pop(context),
+                    ),
+
+                    GestureDetector(
+                      onTap: _navigateToProfile,
+                      child: Row(
                         children: [
-                          Text(
-                            widget.chat.otherUser?.fullName ??
-                                widget.chat.otherUser?.username ?? 'User',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15),
+                          AvatarWidget(
+                            avatarUrl:
+                                widget.chat.otherUser?.avatarUrl,
+                            username:
+                                widget.chat.otherUser?.username ?? '',
+                            radius: 20,
                           ),
-                          Text(
-                            '@${widget.chat.otherUser?.username ?? ''}',
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 11),
+
+                          const SizedBox(width: 10),
+
+                          Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.chat.otherUser?.fullName ??
+                                    widget.chat.otherUser?.username ??
+                                    'User',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                              ),
+
+                              Text(
+                                '@${widget.chat.otherUser?.username ?? ''}',
+                                style: TextStyle(
+                                  color:
+                                      Colors.white.withOpacity(0.8),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ]),
-                  ),
-                  const Spacer(),
-                  if (widget.chat.swapStatus == 'none' ||
-                      widget.chat.swapStatus == '')
-                    TextButton.icon(
-                      onPressed: _confirmSwap,
-                      icon: const Icon(Icons.handshake_outlined,
-                          color: Colors.white, size: 18),
-                      label: const Text('Confirm Swap',
-                          style: TextStyle(
-                              color: Colors.white, fontSize: 12)),
-                      style: TextButton.styleFrom(
-                        backgroundColor:
-                            Colors.white.withOpacity(0.2),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                      ),
                     ),
-                  if (widget.chat.swapStatus == 'pending')
-                    TextButton.icon(
-                      onPressed: _showCompleteSwapDialog,
-                      icon: const Icon(Icons.check_circle_outline,
-                          color: Colors.white, size: 18),
-                      label: const Text('Mark Done',
+
+                    const Spacer(),
+
+                    if (widget.chat.swapStatus == 'none' ||
+                        widget.chat.swapStatus == '')
+                      TextButton.icon(
+                        onPressed: _confirmSwap,
+                        icon: const Icon(
+                          Icons.handshake_outlined,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Confirm Swap',
                           style: TextStyle(
-                              color: Colors.white, fontSize: 12)),
-                      style: TextButton.styleFrom(
-                        backgroundColor:
-                            AppColors.success.withOpacity(0.3),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          backgroundColor:
+                              Colors.white.withOpacity(0.2),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                        ),
                       ),
-                    ),
-                ]),
+
+                    if (widget.chat.swapStatus == 'pending')
+                      TextButton.icon(
+                        onPressed: _showCompleteSwapDialog,
+                        icon: const Icon(
+                          Icons.check_circle_outline,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Mark Done',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          backgroundColor:
+                              AppColors.success.withOpacity(0.3),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
 
-          // ── Swap status banner ────────────────────────────────────────
-          if (widget.chat.swapStatus == 'pending' ||
-              widget.chat.swapStatus == 'completed')
-            Container(
-              color: widget.chat.swapStatus == 'completed'
-                  ? AppColors.success.withOpacity(isDark ? 0.15 : 0.10)
-                  : AppColors.warning.withOpacity(isDark ? 0.15 : 0.10),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    widget.chat.swapStatus == 'completed'
-                        ? Icons.check_circle_rounded
-                        : Icons.hourglass_top_rounded,
-                    size: 16,
-                    color: widget.chat.swapStatus == 'completed'
-                        ? AppColors.success
-                        : AppColors.warning,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    widget.chat.swapStatus == 'completed'
-                        ? '✅ Swap completed! Rate your experience.'
-                        : '⏳ Swap pending — mark as done when complete.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: widget.chat.swapStatus == 'completed'
-                          ? AppColors.success
-                          : AppColors.warning,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (widget.chat.swapStatus == 'completed') ...[
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => RateSwapScreen(
-                            chatId: widget.chat.id,
-                            otherUser: widget.chat.otherUser,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        'Rate Now',
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-          // ── Messages list ─────────────────────────────────────────────
           Expanded(
             child: Consumer<ChatService>(
               builder: (_, cs, __) {
-                WidgetsBinding.instance
-                    .addPostFrameCallback((_) => _scrollToBottom());
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _scrollToBottom(),
+                );
+
                 if (cs.messages.isEmpty) {
                   return Center(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.waving_hand_rounded,
-                            size: 48, color: textLt),
+                        Icon(
+                          Icons.waving_hand_rounded,
+                          size: 48,
+                          color: textLt,
+                        ),
+
                         const SizedBox(height: 12),
-                        Text('Say hi to start swapping skills!',
-                            style:
-                                TextStyle(color: textSec, fontSize: 14)),
+
+                        Text(
+                          'Say hi to start swapping skills!',
+                          style: TextStyle(
+                            color: textSec,
+                            fontSize: 14,
+                          ),
+                        ),
                       ],
                     ),
                   );
                 }
+
                 return ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 16),
+                    horizontal: 12,
+                    vertical: 16,
+                  ),
                   itemCount: cs.messages.length,
                   itemBuilder: (_, i) {
                     final msg = cs.messages[i];
-                    final isMe = msg.senderId == currentUserId;
+                    final isMe =
+                        msg.senderId == currentUserId;
+
                     if (msg.messageType == 'system') {
-                      return _buildSystemMsg(msg.content ?? '', isDark);
+                      return _buildSystemMsg(
+                        msg.content ?? '',
+                        isDark,
+                      );
                     }
+
                     return _buildBubble(
-                            msg, isMe, textPri, textLt, bubbleBg, isDark)
-                        .animate()
-                        .fadeIn(duration: 200.ms);
+                      msg,
+                      isMe,
+                      textPri,
+                      textLt,
+                      bubbleBg,
+                      isDark,
+                    ).animate().fadeIn(duration: 200.ms);
                   },
                 );
               },
             ),
           ),
 
-          // ── Input bar ─────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             decoration: BoxDecoration(
               color: inputBarBg,
-              border: Border(top: BorderSide(color: borderTop, width: 1)),
+              border: Border(
+                top: BorderSide(
+                  color: borderTop,
+                  width: 1,
+                ),
+              ),
               boxShadow: isDark
                   ? null
                   : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
+                        color:
+                            Colors.black.withOpacity(0.06),
                         blurRadius: 10,
                         offset: const Offset(0, -2),
                       ),
@@ -434,72 +539,100 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: SafeArea(
               top: false,
-              child: Row(children: [
-                IconButton(
-                  onPressed: _pickAndSendImage,
-                  icon: Icon(Icons.image_outlined, color: primaryColor),
-                  tooltip: 'Send Image',
-                ),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: inputFieldBg,
-                      borderRadius: BorderRadius.circular(24),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed:
+                        _isSending ? null : _pickAndSendImage,
+                    icon: Icon(
+                      Icons.image_outlined,
+                      color: primaryColor,
                     ),
-                    child: TextField(
-                      controller: _msgCtrl,
-                      maxLines: 4,
-                      minLines: 1,
-                      textCapitalization:
-                          TextCapitalization.sentences,
-                      style: TextStyle(color: textPri, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        hintStyle:
-                            TextStyle(color: textLt, fontSize: 14),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                    tooltip: 'Send Image',
+                  ),
+
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: inputFieldBg,
+                        borderRadius:
+                            BorderRadius.circular(24),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _isSending ? null : _sendMessage,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
+                      child: TextField(
+                        controller: _msgCtrl,
+                        maxLines: 4,
+                        minLines: 1,
+                        textCapitalization:
+                            TextCapitalization.sentences,
+                        style: TextStyle(
+                          color: textPri,
+                          fontSize: 14,
                         ),
-                      ],
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          hintStyle: TextStyle(
+                            color: textLt,
+                            fontSize: 14,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding:
+                              const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
                     ),
-                    child: _isSending
-                        ? const Center(
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.send_rounded,
-                            color: Colors.white, size: 20),
                   ),
-                ),
-              ]),
+
+                  const SizedBox(width: 8),
+
+                  GestureDetector(
+                    onTap:
+                        _isSending ? null : _sendMessage,
+                    child: AnimatedContainer(
+                      duration:
+                          const Duration(milliseconds: 200),
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient:
+                            AppColors.primaryGradient,
+                        borderRadius:
+                            BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary
+                                .withOpacity(0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: _isSending
+                          ? const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -507,88 +640,129 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildBubble(MessageModel msg, bool isMe, Color textPri,
-      Color textLt, Color bubbleBg, bool isDark) {
+  Widget _buildBubble(
+    MessageModel msg,
+    bool isMe,
+    Color textPri,
+    Color textLt,
+    Color bubbleBg,
+    bool isDark,
+  ) {
     return Padding(
       padding: EdgeInsets.only(
-          left: isMe ? 50 : 0, right: isMe ? 0 : 50, bottom: 6),
+        left: isMe ? 50 : 0,
+        right: isMe ? 0 : 50,
+        bottom: 6,
+      ),
       child: Column(
-        crossAxisAlignment:
-            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Container(
             padding: msg.messageType == 'image'
                 ? EdgeInsets.zero
                 : const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
             decoration: BoxDecoration(
-              gradient: isMe ? AppColors.primaryGradient : null,
+              gradient:
+                  isMe ? AppColors.primaryGradient : null,
               color: isMe ? null : bubbleBg,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(18),
                 topRight: const Radius.circular(18),
-                bottomLeft: Radius.circular(isMe ? 18 : 4),
-                bottomRight: Radius.circular(isMe ? 4 : 18),
+                bottomLeft:
+                    Radius.circular(isMe ? 18 : 4),
+                bottomRight:
+                    Radius.circular(isMe ? 4 : 18),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black
-                      .withOpacity(isDark ? 0.2 : 0.05),
+                  color: Colors.black.withOpacity(
+                    isDark ? 0.2 : 0.05,
+                  ),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: msg.messageType == 'image' && msg.imageUrl != null
+            child: msg.messageType == 'image' &&
+                    msg.imageUrl != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(isMe ? 18 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 18),
+                      topLeft:
+                          const Radius.circular(18),
+                      topRight:
+                          const Radius.circular(18),
+                      bottomLeft:
+                          Radius.circular(isMe ? 18 : 4),
+                      bottomRight:
+                          Radius.circular(isMe ? 4 : 18),
                     ),
                     child: Image.network(
                       msg.imageUrl!,
                       width: 200,
                       fit: BoxFit.cover,
-                      loadingBuilder: (_, child, progress) =>
-                          progress == null
-                              ? child
-                              : const SizedBox(
-                                  width: 200,
-                                  height: 150,
-                                  child: Center(
-                                      child:
-                                          CircularProgressIndicator()),
-                                ),
+                      loadingBuilder:
+                          (_, child, progress) {
+                        if (progress == null) {
+                          return child;
+                        }
+
+                        return const SizedBox(
+                          width: 200,
+                          height: 150,
+                          child: Center(
+                            child:
+                                CircularProgressIndicator(),
+                          ),
+                        );
+                      },
                     ),
                   )
                 : Text(
                     msg.content ?? '',
                     style: TextStyle(
-                      color: isMe ? Colors.white : textPri,
+                      color:
+                          isMe ? Colors.white : textPri,
                       fontSize: 14,
                     ),
                   ),
           ),
+
           const SizedBox(height: 2),
+
           Text(
             timeago.format(msg.createdAt),
-            style: TextStyle(fontSize: 10, color: textLt),
+            style: TextStyle(
+              fontSize: 10,
+              color: textLt,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSystemMsg(String content, bool isDark) {
+  Widget _buildSystemMsg(
+    String content,
+    bool isDark,
+  ) {
     return Center(
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        margin: const EdgeInsets.symmetric(
+          vertical: 8,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 6,
+        ),
         decoration: BoxDecoration(
-          color: AppColors.success.withOpacity(isDark ? 0.18 : 0.10),
+          color: AppColors.success.withOpacity(
+            isDark ? 0.18 : 0.10,
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -604,13 +778,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// Deferred navigation helper — import at bottom breaks circular chain
-
-
 class _UserProfileRoute extends StatelessWidget {
   final String userId;
-  const _UserProfileRoute({required this.userId});
+
+  const _UserProfileRoute({
+    required this.userId,
+  });
+
   @override
-  Widget build(BuildContext context) =>
-      profile_screen.UserProfileScreen(userId: userId);
+  Widget build(BuildContext context) {
+    return profile_screen.UserProfileScreen(
+      userId: userId,
+    );
+  }
 }

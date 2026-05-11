@@ -10,25 +10,31 @@ class ChatService extends ChangeNotifier {
   List<ChatModel> _chats = [];
   List<MessageModel> _messages = [];
   bool _isLoading = false;
+
   RealtimeChannel? _messageChannel;
 
   List<ChatModel> get chats => _chats;
   List<MessageModel> get messages => _messages;
   bool get isLoading => _isLoading;
 
+  // ═════════════════════════════════════════════
+  // GET OR CREATE CHAT
+  // ═════════════════════════════════════════════
   Future<ChatModel?> getOrCreateChat({
     required String otherUserId,
     String? postId,
   }) async {
     final currentUserId = supabase.auth.currentUser?.id;
+
     if (currentUserId == null) return null;
 
     try {
-      // Check existing chat
       final existing = await supabase
           .from('chats')
           .select()
-          .or('and(participant_1.eq.$currentUserId,participant_2.eq.$otherUserId),and(participant_1.eq.$otherUserId,participant_2.eq.$currentUserId)')
+          .or(
+            'and(participant_1.eq.$currentUserId,participant_2.eq.$otherUserId),and(participant_1.eq.$otherUserId,participant_2.eq.$currentUserId)',
+          )
           .maybeSingle();
 
       if (existing != null) {
@@ -37,16 +43,21 @@ class ChatService extends ChangeNotifier {
             .select()
             .eq('id', otherUserId)
             .single();
-        return ChatModel.fromJson(existing,
-            otherUser: ProfileModel.fromJson(otherProfile));
+
+        return ChatModel.fromJson(
+          existing,
+          otherUser: ProfileModel.fromJson(otherProfile),
+        );
       }
 
-      // Create new chat
-      final data = await supabase.from('chats').insert({
-        'participant_1': currentUserId,
-        'participant_2': otherUserId,
-        'post_id': postId,
-      }).select().single();
+      final data = await supabase
+          .from('chats')
+          .insert({
+            'participant_1': currentUserId,
+            'participant_2': otherUserId,
+          })
+          .select()
+          .single();
 
       final otherProfile = await supabase
           .from('profiles')
@@ -54,16 +65,22 @@ class ChatService extends ChangeNotifier {
           .eq('id', otherUserId)
           .single();
 
-      return ChatModel.fromJson(data,
-          otherUser: ProfileModel.fromJson(otherProfile));
+      return ChatModel.fromJson(
+        data,
+        otherUser: ProfileModel.fromJson(otherProfile),
+      );
     } catch (e) {
       debugPrint('Error getting/creating chat: $e');
       return null;
     }
   }
 
+  // ═════════════════════════════════════════════
+  // FETCH CHATS
+  // ═════════════════════════════════════════════
   Future<void> fetchChats() async {
     final userId = supabase.auth.currentUser?.id;
+
     if (userId == null) return;
 
     _isLoading = true;
@@ -77,6 +94,7 @@ class ChatService extends ChangeNotifier {
           .order('last_message_at', ascending: false);
 
       List<ChatModel> chats = [];
+
       for (final chatJson in data as List) {
         final otherUserId = chatJson['participant_1'] == userId
             ? chatJson['participant_2']
@@ -88,69 +106,84 @@ class ChatService extends ChangeNotifier {
             .eq('id', otherUserId)
             .single();
 
-        chats.add(ChatModel.fromJson(chatJson,
-            otherUser: ProfileModel.fromJson(profileData)));
+        chats.add(
+          ChatModel.fromJson(
+            chatJson,
+            otherUser: ProfileModel.fromJson(profileData),
+          ),
+        );
       }
+
       _chats = chats;
     } catch (e) {
       debugPrint('Error fetching chats: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
+
+    _isLoading = false;
+    notifyListeners();
   }
 
+  // ═════════════════════════════════════════════
+  // FETCH MESSAGES
+  // ═════════════════════════════════════════════
   Future<void> fetchMessages(String chatId) async {
     try {
       final data = await supabase
           .from('messages')
-          .select('*, profiles(*)')
+          .select()
           .eq('chat_id', chatId)
           .order('created_at', ascending: true);
 
-      _messages = (data as List).map((m) => MessageModel.fromJson(m)).toList();
+      _messages = (data as List)
+          .map((m) => MessageModel.fromJson(m))
+          .toList();
+
       notifyListeners();
     } catch (e) {
       debugPrint('Error fetching messages: $e');
     }
   }
 
+  // ═════════════════════════════════════════════
+  // REALTIME SUBSCRIPTION
+  // ═════════════════════════════════════════════
   void subscribeToChat(String chatId) {
-    _messageChannel?.unsubscribe();
-    _messageChannel = supabase.channel('chat_$chatId').onPostgresChanges(
-      event: PostgresChangeEvent.insert,
-      schema: 'public',
-      table: 'messages',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'chat_id',
-        value: chatId,
-      ),
-      callback: (payload) async {
-        final newMessage = payload.newRecord;
-        // Fetch with profile
-        try {
-          final data = await supabase
-              .from('messages')
-              .select('*, profiles(*)')
-              .eq('id', newMessage['id'])
-              .single();
-          final msg = MessageModel.fromJson(data);
-          _messages.add(msg);
-          notifyListeners();
-        } catch (e) {
-          debugPrint('Error fetching new message: $e');
-        }
-      },
-    ).subscribe();
+    unsubscribeFromChat();
+
+    _messageChannel = supabase.channel('chat_$chatId');
+
+    _messageChannel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'chat_id',
+            value: chatId,
+          ),
+          callback: (payload) async {
+            await fetchMessages(chatId);
+          },
+        )
+        .subscribe();
   }
 
+  // ═════════════════════════════════════════════
+  // UNSUBSCRIBE
+  // ═════════════════════════════════════════════
   void unsubscribeFromChat() {
-    _messageChannel?.unsubscribe();
-    _messageChannel = null;
+    if (_messageChannel != null) {
+      supabase.removeChannel(_messageChannel!);
+      _messageChannel = null;
+    }
+
     _messages = [];
   }
 
+  // ═════════════════════════════════════════════
+  // SEND MESSAGE
+  // ═════════════════════════════════════════════
   Future<bool> sendMessage({
     required String chatId,
     String? content,
@@ -158,22 +191,27 @@ class ChatService extends ChangeNotifier {
     String messageType = 'text',
   }) async {
     final userId = supabase.auth.currentUser?.id;
+
     if (userId == null) return false;
 
     try {
       await supabase.from('messages').insert({
         'chat_id': chatId,
         'sender_id': userId,
-        'content': content,
+        'content': content ?? '',
         'image_url': imageUrl,
         'message_type': messageType,
       });
 
-      // Update chat last message
       await supabase.from('chats').update({
-        'last_message': messageType == 'image' ? '📷 Image' : content,
-        'last_message_at': DateTime.now().toIso8601String(),
+        'last_message':
+            messageType == 'image' ? '📷 Image' : content,
+        'last_message_at':
+            DateTime.now().toIso8601String(),
       }).eq('id', chatId);
+
+      // Immediate refresh
+      await fetchMessages(chatId);
 
       return true;
     } catch (e) {
@@ -182,43 +220,71 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  Future<String?> uploadChatImage(File imageFile) async {
-    try {
-      final fileName = '${const Uuid().v4()}.jpg';
-      await supabase.storage.from('chat-images').upload(fileName, imageFile);
-      return supabase.storage.from('chat-images').getPublicUrl(fileName);
-    } catch (e) {
-      debugPrint('Error uploading image: $e');
-      return null;
-    }
-  }
+  // ═════════════════════════════════════════════
+  // IMAGE UPLOAD
+  // ═════════════════════════════════════════════
+ Future<String?> uploadChatImage(File imageFile) async {
+  try {
+    final fileName =
+        '${const Uuid().v4()}_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
+    final bytes = await imageFile.readAsBytes();
+
+    await supabase.storage
+        .from('chat-images')
+        .uploadBinary(
+          fileName,
+          bytes,
+          fileOptions: const FileOptions(
+            upsert: true,
+          ),
+        );
+
+    final publicUrl = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(fileName);
+
+    debugPrint('UPLOAD SUCCESS: $publicUrl');
+
+    return publicUrl;
+  } catch (e) {
+    debugPrint('Error uploading image: $e');
+    return null;
+  }
+}
+  // ═════════════════════════════════════════════
+  // CONFIRM SWAP
+  // ═════════════════════════════════════════════
   Future<SwapModel?> confirmSwap({
     required String chatId,
     required String otherUserId,
     String? postId,
   }) async {
     final userId = supabase.auth.currentUser?.id;
+
     if (userId == null) return null;
 
     try {
-      final data = await supabase.from('swaps').insert({
-        'chat_id': chatId,
-        'post_id': postId,
-        'initiator_id': userId,
-        'receiver_id': otherUserId,
-        'status': 'pending',
-      }).select().single();
+      final data = await supabase
+          .from('swaps')
+          .insert({
+            'chat_id': chatId,
+            'initiator_id': userId,
+            'receiver_id': otherUserId,
+            'status': 'pending',
+          })
+          .select()
+          .single();
 
       await supabase.from('chats').update({
         'swap_confirmed': true,
         'swap_status': 'pending',
       }).eq('id', chatId);
 
-      // Send system message
       await sendMessage(
         chatId: chatId,
-        content: '🤝 Swap confirmed! Waiting for completion.',
+        content:
+            '🤝 Swap confirmed! Waiting for completion.',
         messageType: 'system',
       );
 
@@ -229,11 +295,18 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  Future<bool> markSwapCompleted(String swapId, String chatId) async {
+  // ═════════════════════════════════════════════
+  // COMPLETE SWAP
+  // ═════════════════════════════════════════════
+  Future<bool> markSwapCompleted(
+    String swapId,
+    String chatId,
+  ) async {
     try {
       await supabase.from('swaps').update({
         'status': 'completed',
-        'completed_at': DateTime.now().toIso8601String(),
+        'completed_at':
+            DateTime.now().toIso8601String(),
       }).eq('id', swapId);
 
       await supabase.from('chats').update({
@@ -246,23 +319,34 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  // ═════════════════════════════════════════════
+  // FETCH USER SWAPS
+  // ═════════════════════════════════════════════
   Future<List<SwapModel>> fetchUserSwaps() async {
     final userId = supabase.auth.currentUser?.id;
+
     if (userId == null) return [];
 
     try {
       final data = await supabase
           .from('swaps')
           .select()
-          .or('initiator_id.eq.$userId,receiver_id.eq.$userId')
+          .or(
+            'initiator_id.eq.$userId,receiver_id.eq.$userId',
+          )
           .order('created_at', ascending: false);
 
-      return (data as List).map((s) => SwapModel.fromJson(s)).toList();
+      return (data as List)
+          .map((s) => SwapModel.fromJson(s))
+          .toList();
     } catch (e) {
       return [];
     }
   }
 
+  // ═════════════════════════════════════════════
+  // SUBMIT RATING
+  // ═════════════════════════════════════════════
   Future<bool> submitRating({
     required String swapId,
     required String rateeId,
@@ -270,6 +354,7 @@ class ChatService extends ChangeNotifier {
     String? review,
   }) async {
     final userId = supabase.auth.currentUser?.id;
+
     if (userId == null) return false;
 
     try {
@@ -280,23 +365,32 @@ class ChatService extends ChangeNotifier {
         'rating': rating,
         'review': review,
       });
+
       return true;
     } catch (e) {
       return false;
     }
   }
 
-  Future<List<RatingModel>> fetchUserRatings(String userId) async {
+  // ═════════════════════════════════════════════
+  // FETCH USER RATINGS
+  // ═════════════════════════════════════════════
+  Future<List<RatingModel>> fetchUserRatings(
+    String userId,
+  ) async {
     try {
       final data = await supabase
           .from('ratings')
-          .select('*, profiles:rater_id(*)')
+          .select()
           .eq('ratee_id', userId)
           .order('created_at', ascending: false);
 
-      return (data as List).map((r) => RatingModel.fromJson(r)).toList();
+      return (data as List)
+          .map((r) => RatingModel.fromJson(r))
+          .toList();
     } catch (e) {
       return [];
     }
   }
 }
+
