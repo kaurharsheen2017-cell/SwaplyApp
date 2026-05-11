@@ -14,7 +14,8 @@ import '../../widgets/shimmer_card.dart';
 import '../notifications/notifications_screen.dart';
 import '../posts/post_detail_screen.dart';
 import '../../widgets/filter_sheet.dart';
-
+import '../posts/open_requests_screen.dart';
+import '../leaderboard/leaderboard_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 //  ExploreScreen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   int  _selectedCat  = 0;
   bool _isSearching  = false;
   bool _searchActive = false;
+  bool _headerCollapsed = false;
 
   static const _categories = [
     _Cat('All',      Icons.apps_rounded,                   null),
@@ -62,6 +64,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
+    _scrollCtrl.addListener(() {
+      final collapsed = _scrollCtrl.offset > 8;
+      if (collapsed != _headerCollapsed) setState(() => _headerCollapsed = collapsed);
+    });
   }
 
   Future<void> _loadAll() async {
@@ -407,29 +413,49 @@ class _ExploreScreenState extends State<ExploreScreen> {
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
+      title: AnimatedOpacity(
+        opacity: _headerCollapsed ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 180),
+        child: Text('Swaply',
+            style: GoogleFonts.dmSans(
+                color: textPri, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+      ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Divider(height: 1, thickness: 1, color: divColor),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 1,
+          color: _headerCollapsed ? divColor : Colors.transparent,
+        ),
       ),
       actions: [
-        Consumer<NotificationService>(
-          builder: (_, ns, __) => Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: badges.Badge(
-              showBadge: ns.unreadCount > 0,
-              badgeContent: Text(
-                ns.unreadCount > 9 ? '9+' : '${ns.unreadCount}',
-                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
-              ),
-              badgeStyle: badges.BadgeStyle(badgeColor: primary, padding: const EdgeInsets.all(4)),
-              child: GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-                child: Icon(Icons.notifications_outlined, color: textPri, size: 24),
-              ),
-            ),
-          ),
+        // Open Requests — funnel/list icon
+        IconButton(
+          tooltip: 'Open Requests',
+          icon: Icon(Icons.help,
+              color: primary, size: 22),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(
+                  builder: (_) => const OpenRequestsScreen())),
         ),
+        // Leaderboard — trophy icon
+        IconButton(
+          tooltip: 'Leaderboard',
+          icon: Icon(Icons.emoji_events_rounded,
+              color: primary, size: 22),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(
+                  builder: (_) => const LeaderboardScreen())),
+        ),
+        // Notifications
+        IconButton(
+          icon: Icon(Icons.notifications_outlined,
+              color: primary, size: 22),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(
+                  builder: (_) => const NotificationsScreen())),
+        ),
+        const SizedBox(width: 4),
       ],
       flexibleSpace: FlexibleSpaceBar(
         collapseMode: CollapseMode.pin,

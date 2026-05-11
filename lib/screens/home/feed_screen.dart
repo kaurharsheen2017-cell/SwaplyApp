@@ -12,9 +12,11 @@ import '../../utils/app_theme.dart';
 import '../../widgets/avatar_widget.dart';
 import '../../widgets/chatbot_widget.dart';
 import '../../widgets/filter_sheet.dart';
-import '../explore/explore_screen.dart';
+import '../leaderboard/leaderboard_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../posts/open_requests_screen.dart';
 import '../posts/post_detail_screen.dart';
+import '../explore/explore_screen.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -261,15 +263,31 @@ class _FeedScreenState extends State<FeedScreen> {
         ),
       ),
       actions: [
+        // Open Requests — funnel/list icon
         IconButton(
-          icon: Icon(Icons.help_outline_rounded, color: textPri, size: 22),
+          tooltip: 'Open Requests',
+          icon: Icon(Icons.help,
+              color: primary, size: 22),
           onPressed: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const ExploreScreen())),
+              MaterialPageRoute(
+                  builder: (_) => const OpenRequestsScreen())),
         ),
+        // Leaderboard — trophy icon
         IconButton(
-          icon: Icon(Icons.notifications_outlined, color: textPri, size: 22),
+          tooltip: 'Leaderboard',
+          icon: Icon(Icons.emoji_events_rounded,
+              color: primary, size: 22),
           onPressed: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+              MaterialPageRoute(
+                  builder: (_) => const LeaderboardScreen())),
+        ),
+        // Notifications
+        IconButton(
+          icon: Icon(Icons.notifications_outlined,
+              color: primary, size: 22),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(
+                  builder: (_) => const NotificationsScreen())),
         ),
         const SizedBox(width: 4),
       ],

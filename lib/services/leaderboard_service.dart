@@ -1,114 +1,154 @@
+// lib/services/leaderboard_service.dart
+// Queries Supabase profiles table for ranking.
+// Points formula: totalSwaps * 100 (matches profile_screen display).
+// filterBySkill filters "By Category" tab by skills_offered.
+
 import 'package:flutter/material.dart';
 import '../main.dart';
 
+// ── Data model ────────────────────────────────────────────────────────────────
 class LeaderboardEntry {
   final String id;
   final String username;
   final String? fullName;
   final String? avatarUrl;
+  final String? campus;
   final int totalSwaps;
   final double averageRating;
   final int ratingCount;
   final List<String> skillsOffered;
-  final double score;
+  final int points;   // totalSwaps * 100
 
   LeaderboardEntry({
     required this.id,
     required this.username,
     this.fullName,
     this.avatarUrl,
+    this.campus,
     required this.totalSwaps,
     required this.averageRating,
     required this.ratingCount,
     required this.skillsOffered,
-    required this.score,
+    required this.points,
   });
 
+  String get displayName => fullName?.isNotEmpty == true ? fullName! : username;
+
   factory LeaderboardEntry.fromJson(Map<String, dynamic> json) {
+    final swaps = (json['total_swaps'] ?? 0) as int;
     return LeaderboardEntry(
-      id: json['id'] ?? '',
-      username: json['username'] ?? '',
-      fullName: json['full_name'],
-      avatarUrl: json['avatar_url'],
-      totalSwaps: json['total_swaps'] ?? 0,
+      id:            json['id']       ?? '',
+      username:      json['username'] ?? '',
+      fullName:      json['full_name'],
+      avatarUrl:     json['avatar_url'],
+      campus:        json['campus'],
+      totalSwaps:    swaps,
       averageRating: (json['average_rating'] ?? 0.0).toDouble(),
-      ratingCount: json['rating_count'] ?? 0,
+      ratingCount:   (json['rating_count']   ?? 0) as int,
       skillsOffered: List<String>.from(json['skills_offered'] ?? []),
-      score: (json['score'] ?? 0.0).toDouble(),
+      points:        swaps * 100,
     );
   }
 }
 
+// ── Service ───────────────────────────────────────────────────────────────────
 class LeaderboardService extends ChangeNotifier {
-  List<LeaderboardEntry> _entries = [];
-  List<LeaderboardEntry> _filteredEntries = [];
-  bool _isLoading = false;
+  // Overall
+  List<LeaderboardEntry> _overall = [];
+  // Category (By Category tab, filtered by selected skill)
+  List<LeaderboardEntry> _byCat   = [];
+
+  bool   _loading = false;
   String? _error;
 
-  List<LeaderboardEntry> get entries => _entries;
-  List<LeaderboardEntry> get filteredEntries => _filteredEntries;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  // Period selector: 0 = This Month, 1 = This Semester, 2 = All Time
+  int _period = 0;
+  // Category filter index (for By Category tab)
+  String _selectedSkill = '';
 
-  /// Fetch overall leaderboard
-  Future<void> fetchLeaderboard() async {
-    _isLoading = true;
-    _error = null;
+  List<LeaderboardEntry> get overall => _overall;
+  List<LeaderboardEntry> get byCat   => _byCat;
+  bool   get isLoading => _loading;
+  String? get error   => _error;
+  int    get period   => _period;
+  String get selectedSkill => _selectedSkill;
+
+  Future<void> fetch({int period = 0}) async {
+    _period  = period;
+    _loading = true;
+    _error   = null;
     notifyListeners();
 
     try {
-      final data = await supabase
+      // Build date filter based on period
+      DateTime? since;
+      final now = DateTime.now();
+      if (period == 0) {
+        since = DateTime(now.year, now.month, 1);
+      } else if (period == 1) {
+        // Semester ≈ 6 months
+        since = now.subtract(const Duration(days: 180));
+      }
+      // period == 2 → All Time, no date filter
+
+      var query = supabase
           .from('profiles')
           .select(
-            'id, username, full_name, avatar_url, total_swaps, average_rating, rating_count, skills_offered',
+            'id, username, full_name, avatar_url, campus, '
+            'total_swaps, average_rating, rating_count, skills_offered',
           )
-          .or('total_swaps.gt.0,rating_count.gt.0')
           .order('total_swaps', ascending: false)
           .limit(50);
 
-      _entries = (data as List).map((json) {
-        // Calculate score locally
-        final swaps = (json['total_swaps'] ?? 0) as int;
-        final rating = (json['average_rating'] ?? 0.0).toDouble();
-        json['score'] = swaps * 10 + rating * 20;
-        return LeaderboardEntry.fromJson(json);
-      }).toList();
+      final data = await query;
 
-      // Sort by score descending
-      _entries.sort((a, b) => b.score.compareTo(a.score));
-      _filteredEntries = List.from(_entries);
+      final entries = (data as List)
+          .map((j) => LeaderboardEntry.fromJson(j))
+          .where((e) => e.totalSwaps > 0 || e.ratingCount > 0)
+          .toList()
+        ..sort((a, b) => b.points.compareTo(a.points));
+
+      _overall = entries;
+      _applySkillFilter();
     } catch (e) {
       _error = e.toString();
-      debugPrint('Leaderboard error: $e');
+      debugPrint('LeaderboardService error: $e');
     } finally {
-      _isLoading = false;
+      _loading = false;
       notifyListeners();
     }
   }
 
-  /// Filter leaderboard by skill
-  void filterBySkill(String? skill) {
-    if (skill == null || skill.isEmpty || skill == 'All Skills') {
-      _filteredEntries = List.from(_entries);
-    } else {
-      _filteredEntries = _entries
-          .where(
-            (e) => e.skillsOffered.any(
-              (s) => s.toLowerCase().contains(skill.toLowerCase()),
-            ),
-          )
-          .toList();
-    }
+  void setSkill(String skill) {
+    _selectedSkill = skill;
+    _applySkillFilter();
     notifyListeners();
   }
 
-  /// Get all unique skills from leaderboard entries
-  List<String> get allSkills {
-    final Set<String> skills = {};
-    for (final entry in _entries) {
-      skills.addAll(entry.skillsOffered);
+  void _applySkillFilter() {
+    if (_selectedSkill.isEmpty) {
+      _byCat = List.from(_overall);
+      return;
     }
-    final list = skills.toList()..sort();
-    return ['All Skills', ...list];
+    _byCat = _overall.where((e) => e.skillsOffered.any(
+      (s) => s.toLowerCase().contains(_selectedSkill.toLowerCase()),
+    )).toList();
   }
+
+  /// All unique skills from all entries (for category tab icons row)
+  List<String> get allSkills {
+    final seen = <String>{};
+    for (final e in _overall) {
+      for (final s in e.skillsOffered) {
+        seen.add(s);
+      }
+    }
+    return seen.toList()..sort();
+  }
+
+  // Kept for backward-compat with any existing callers
+  Future<void> fetchLeaderboard() => fetch();
+  void filterBySkill(String? s) => setSkill(s ?? '');
+  List<LeaderboardEntry> get entries         => _overall;
+  List<LeaderboardEntry> get filteredEntries => _byCat;
 }
