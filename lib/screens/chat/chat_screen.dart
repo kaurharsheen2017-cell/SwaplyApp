@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -12,6 +11,7 @@ import '../../utils/app_theme.dart';
 import '../../widgets/avatar_widget.dart';
 import 'rate_swap_screen.dart';
 import '../../screens/profile/user_profile_screen.dart' as profile_screen;
+import '../../main.dart';
 
 class ChatScreen extends StatefulWidget {
   final ChatModel chat;
@@ -25,13 +25,31 @@ class _ChatScreenState extends State<ChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _isSending = false;
+  // Local swap status — kept in sync with DB after every swap action
+  late String _swapStatus;
 
   @override
   void initState() {
     super.initState();
+    _swapStatus = widget.chat.swapStatus;
     final cs = context.read<ChatService>();
     cs.fetchMessages(widget.chat.id).then((_) => _scrollToBottom());
     cs.subscribeToChat(widget.chat.id);
+    _refreshSwapStatus(); // sync with DB on open
+  }
+
+  Future<void> _refreshSwapStatus() async {
+    try {
+      final data = await supabase
+          .from('chats')
+          .select('swap_status')
+          .eq('id', widget.chat.id)
+          .single();
+      final status = data['swap_status'] as String? ?? 'none';
+      if (mounted && status != _swapStatus) {
+        setState(() => _swapStatus = status);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -177,7 +195,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
 
-        setState(() {});
+        setState(() => _swapStatus = 'pending');
       }
     }
   }
@@ -190,21 +208,19 @@ class _ChatScreenState extends State<ChatScreen> {
     final textSec =
         isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
 
-    final swaps = await context.read<ChatService>().fetchUserSwaps();
+    // Fetch only the pending swap for this specific chat
+    SwapModel? swap;
+    try {
+      final data = await supabase
+          .from('swaps')
+          .select()
+          .eq('chat_id', widget.chat.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+      if (data != null) swap = SwapModel.fromJson(data as Map<String, dynamic>);
+    } catch (_) {}
 
-    final swap = swaps.firstWhere(
-      (s) => s.chatId == widget.chat.id && s.status == 'pending',
-      orElse: () => SwapModel(
-        id: '',
-        chatId: '',
-        initiatorId: '',
-        receiverId: '',
-        status: 'pending',
-        createdAt: DateTime.now(),
-      ),
-    );
-
-    if (swap.id.isEmpty || !mounted) return;
+    if (swap == null || swap.id.isEmpty || !mounted) return;
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -244,16 +260,15 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     if (confirm == true && mounted) {
-      await context
+      final success = await context
           .read<ChatService>()
           .markSwapCompleted(swap.id, widget.chat.id);
 
-      if (mounted) {
+      if (success && mounted) {
+        setState(() => _swapStatus = 'completed');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
-              'Swap marked as complete! 🎉 Please rate your experience.',
-            ),
+            content: const Text('Swap marked as complete! 🎉'),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -261,8 +276,16 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         );
-
-        setState(() {});
+        // Navigate to rating screen so user can leave a review
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RateSwapScreen(
+              chatId: widget.chat.id,
+              otherUser: widget.chat.otherUser,
+            ),
+          ),
+        );
       }
     }
   }
@@ -386,8 +409,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     const Spacer(),
 
-                    if (widget.chat.swapStatus == 'none' ||
-                        widget.chat.swapStatus == '')
+                    if (_swapStatus == 'none' ||
+                        _swapStatus == '')
                       TextButton.icon(
                         onPressed: _confirmSwap,
                         icon: const Icon(
@@ -416,7 +439,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
 
-                    if (widget.chat.swapStatus == 'pending')
+                    if (_swapStatus == 'pending')
                       TextButton.icon(
                         onPressed: _showCompleteSwapDialog,
                         icon: const Icon(

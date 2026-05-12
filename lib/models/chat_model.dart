@@ -98,6 +98,12 @@ class SwapModel {
   final DateTime? completedAt;
   final DateTime createdAt;
 
+  // Enriched fields — populated by ChatService.fetchUserSwaps()
+  final ProfileModel? otherUserProfile;
+  final String? skillOffered;
+  final String? skillWanted;
+  final String? exchangeType;
+
   SwapModel({
     required this.id,
     required this.chatId,
@@ -108,9 +114,17 @@ class SwapModel {
     this.confirmedAt,
     this.completedAt,
     required this.createdAt,
+    this.otherUserProfile,
+    this.skillOffered,
+    this.skillWanted,
+    this.exchangeType,
   });
 
-  factory SwapModel.fromJson(Map<String, dynamic> json) {
+  factory SwapModel.fromJson(Map<String, dynamic> json,
+      {ProfileModel? otherUserProfile,
+      String? skillOffered,
+      String? skillWanted,
+      String? exchangeType}) {
     return SwapModel(
       id: json['id'] ?? '',
       chatId: json['chat_id'] ?? '',
@@ -126,6 +140,10 @@ class SwapModel {
           : null,
       createdAt: DateTime.parse(
           json['created_at'] ?? DateTime.now().toIso8601String()),
+      otherUserProfile: otherUserProfile,
+      skillOffered: skillOffered,
+      skillWanted: skillWanted,
+      exchangeType: exchangeType,
     );
   }
 }

@@ -981,6 +981,13 @@ class _SwapRow extends StatelessWidget {
       case 'confirmed': sc = _kP;                     sl = 'Confirmed';  break;
       default:          sc = const Color(0xFFF59E0B); sl = 'In Progress';
     }
+
+    final partner     = swap.otherUserProfile;
+    final partnerName = partner?.fullName ?? partner?.username ?? 'Partner';
+    final partnerUsername = partner != null ? '@${partner.username}' : '';
+    final skill       = swap.skillOffered ?? 'Skill swap';
+    final typeLabel   = (swap.exchangeType ?? 'barter') == 'barter' ? 'Barter' : 'Custom';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
@@ -991,23 +998,28 @@ class _SwapRow extends StatelessWidget {
           color: Colors.black.withOpacity(0.04),
           blurRadius: 8, offset: const Offset(0, 2))]),
       child: Row(children: [
-        Container(width: 46, height: 46,
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurfaceVariant : const Color(0xFFEDE9FF),
-            shape: BoxShape.circle),
-          child: Icon(Icons.person_rounded,
-            color: isDark ? AppColors.darkPrimary : _kP, size: 24)),
+        // Partner avatar
+        AvatarWidget(
+          avatarUrl: partner?.avatarUrl,
+          username: partner?.username ?? '',
+          radius: 23,
+        ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Swap Request',
+          Text(partnerName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               fontSize: 14, fontWeight: FontWeight.w700, color: tPri)),
           const SizedBox(height: 2),
-          Text('with partner',
+          Text(
+            partnerUsername.isNotEmpty ? '$partnerUsername · $skill' : skill,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(fontSize: 12, color: tSec)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('Barter',
+          Text(typeLabel,
             style: GoogleFonts.dmSans(
               fontSize: 12, fontWeight: FontWeight.w600, color: tSec)),
           const SizedBox(height: 5),

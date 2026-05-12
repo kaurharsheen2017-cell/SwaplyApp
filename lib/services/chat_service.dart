@@ -265,14 +265,18 @@ class ChatService extends ChangeNotifier {
     if (userId == null) return null;
 
     try {
+      final insertData = {
+        'chat_id': chatId,
+        'initiator_id': userId,
+        'receiver_id': otherUserId,
+        'status': 'pending',
+      };
+      if (postId != null && postId.isNotEmpty) {
+        insertData['post_id'] = postId;
+      }
       final data = await supabase
           .from('swaps')
-          .insert({
-            'chat_id': chatId,
-            'initiator_id': userId,
-            'receiver_id': otherUserId,
-            'status': 'pending',
-          })
+          .insert(insertData)
           .select()
           .single();
 
@@ -305,41 +309,121 @@ class ChatService extends ChangeNotifier {
     try {
       await supabase.from('swaps').update({
         'status': 'completed',
-        'completed_at':
-            DateTime.now().toIso8601String(),
+        'completed_at': DateTime.now().toIso8601String(),
       }).eq('id', swapId);
 
       await supabase.from('chats').update({
         'swap_status': 'completed',
       }).eq('id', chatId);
 
+      // System message so both parties see the status change in chat
+      await sendMessage(
+        chatId: chatId,
+        content: '✅ Swap marked as completed! Rate your experience.',
+        messageType: 'system',
+      );
+
       return true;
     } catch (e) {
+      debugPrint('Error marking swap completed: $e');
       return false;
     }
   }
 
   // ═════════════════════════════════════════════
-  // FETCH USER SWAPS
+  // FETCH USER SWAPS  (enriched — batched queries)
   // ═════════════════════════════════════════════
   Future<List<SwapModel>> fetchUserSwaps() async {
     final userId = supabase.auth.currentUser?.id;
-
     if (userId == null) return [];
 
     try {
-      final data = await supabase
+      // 1. Fetch all swaps for this user
+      final swapRows = await supabase
           .from('swaps')
           .select()
-          .or(
-            'initiator_id.eq.$userId,receiver_id.eq.$userId',
-          )
-          .order('created_at', ascending: false);
+          .or('initiator_id.eq.$userId,receiver_id.eq.$userId')
+          .order('created_at', ascending: false) as List;
 
-      return (data as List)
-          .map((s) => SwapModel.fromJson(s))
-          .toList();
+      if (swapRows.isEmpty) return [];
+
+      // 2. Collect unique partner IDs and post IDs in one pass
+      final partnerIds = <String>{};
+      final postIds    = <String>{};
+      final chatIds    = <String>{};
+
+      for (final s in swapRows) {
+        final otherId = s['initiator_id'] == userId
+            ? s['receiver_id'] as String
+            : s['initiator_id'] as String;
+        partnerIds.add(otherId);
+        final pid = s['post_id'] as String?;
+        if (pid != null && pid.isNotEmpty) postIds.add(pid);
+        chatIds.add(s['chat_id'] as String);
+      }
+
+      // 3. Batch-fetch all partner profiles
+      final profileRows = await supabase
+          .from('profiles')
+          .select()
+          .inFilter('id', partnerIds.toList()) as List;
+      final profileMap = {
+        for (final p in profileRows) p['id'] as String: ProfileModel.fromJson(p as Map<String, dynamic>)
+      };
+
+      // 4. Batch-fetch post_id from chats (for swaps without a direct post_id)
+      final chatRows = await supabase
+          .from('chats')
+          .select('id, post_id')
+          .inFilter('id', chatIds.toList()) as List;
+      final chatPostMap = {
+        for (final c in chatRows)
+          if (c['post_id'] != null) c['id'] as String: c['post_id'] as String
+      };
+
+      // Merge all known post IDs
+      for (final chatPostId in chatPostMap.values) {
+        postIds.add(chatPostId);
+      }
+
+      // 5. Batch-fetch post details
+      Map<String, Map<String, dynamic>> postMap = {};
+      if (postIds.isNotEmpty) {
+        final postRows = await supabase
+            .from('posts')
+            .select('id, skill_offered, skill_wanted, exchange_type')
+            .inFilter('id', postIds.toList()) as List;
+        postMap = {
+          for (final p in postRows) p['id'] as String: p as Map<String, dynamic>
+        };
+      }
+
+      // 6. Assemble enriched SwapModel list
+      final List<SwapModel> result = [];
+      for (final s in swapRows) {
+        final otherId = s['initiator_id'] == userId
+            ? s['receiver_id'] as String
+            : s['initiator_id'] as String;
+
+        final partnerProfile = profileMap[otherId];
+
+        final postId = (s['post_id'] as String?)?.isNotEmpty == true
+            ? s['post_id'] as String
+            : chatPostMap[s['chat_id'] as String];
+        final postData = postId != null ? postMap[postId] : null;
+
+        result.add(SwapModel.fromJson(
+          s as Map<String, dynamic>,
+          otherUserProfile: partnerProfile,
+          skillOffered: postData?['skill_offered'] as String?,
+          skillWanted:  postData?['skill_wanted']  as String?,
+          exchangeType: postData?['exchange_type'] as String?,
+        ));
+      }
+
+      return result;
     } catch (e) {
+      debugPrint('Error fetching swaps: $e');
       return [];
     }
   }
@@ -393,4 +477,3 @@ class ChatService extends ChangeNotifier {
     }
   }
 }
-

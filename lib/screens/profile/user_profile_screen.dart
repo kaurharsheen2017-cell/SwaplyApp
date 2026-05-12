@@ -12,6 +12,7 @@ import '../../utils/app_theme.dart';
 import '../../widgets/avatar_widget.dart';
 import '../../widgets/post_card.dart';
 import '../../main.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../chat/chat_screen.dart';
 // NOTE: chat_screen.dart is intentionally NOT imported here to avoid a
 // circular dependency (chat_screen → user_profile_screen → chat_screen).
@@ -283,6 +284,80 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     const SizedBox(height: 16),
                   ],
 
+                  // Links
+                  if (_profile != null && _profile!.links.isNotEmpty) ...[
+                    Text('Links',
+                        style: GoogleFonts.dmSans(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: isDark
+                                ? AppColors.darkTextPrimary
+                                : AppColors.textPrimary)),
+                    const SizedBox(height: 8),
+                    ..._profile!.links.map((url) => GestureDetector(
+                          onTap: () => _launchUrl(url),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 11),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.darkSurfaceVariant
+                                  : const Color(0xFFF8F8FF),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: isDark
+                                      ? AppColors.darkBorder
+                                      : AppColors.divider,
+                                  width: 1),
+                            ),
+                            child: Row(children: [
+                              Container(
+                                width: 34, height: 34,
+                                decoration: BoxDecoration(
+                                  color: url.contains('linkedin')
+                                      ? const Color(0xFF0A66C2)
+                                      : isDark
+                                          ? AppColors.darkSurfaceVariant
+                                          : Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color: isDark
+                                          ? AppColors.darkBorder
+                                          : AppColors.divider,
+                                      width: 1),
+                                ),
+                                child: Icon(_iconForUrl(url), size: 16,
+                                    color: url.contains('linkedin')
+                                        ? Colors.white
+                                        : isDark
+                                            ? AppColors.darkTextPrimary
+                                            : Colors.black87),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  url
+                                      .replaceFirst('https://', '')
+                                      .replaceFirst('http://', '')
+                                      .replaceFirst('www.', ''),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: isDark
+                                          ? AppColors.darkTextPrimary
+                                          : AppColors.textPrimary),
+                                ),
+                              ),
+                              Icon(Icons.open_in_new_rounded,
+                                  size: 15, color: textSec),
+                            ]),
+                          ),
+                        )),
+                    const SizedBox(height: 8),
+                  ],
+
                   // Skills Offered
                   if (_profile?.skillsOffered.isNotEmpty ?? false) ...[
                     Text('Skills Offered',
@@ -365,6 +440,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  IconData _iconForUrl(String url) {
+    if (url.contains('linkedin')) return Icons.work_outline_rounded;
+    if (url.contains('github'))   return Icons.code_rounded;
+    return Icons.link_rounded;
   }
 
   void _showReportDialog(BuildContext context) {

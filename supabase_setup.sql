@@ -13,6 +13,7 @@ create table if not exists public.profiles (
   bio text,
   campus text,
   skills_offered text[] default '{}',
+  links text[] default '{}',
   skills_wanted text[] default '{}',
   total_swaps integer default 0,
   average_rating numeric default 0.0,
@@ -112,3 +113,13 @@ using ( auth.uid() = blocker_id );
 create policy "Users can delete their blocks"
 on public.user_blocks for delete
 using ( auth.uid() = blocker_id );
+
+-- ==========================================
+-- 4. ADD MISSING COLUMNS (safe migrations)
+-- ==========================================
+
+-- Add links column to profiles if it doesn't exist
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS links text[] DEFAULT '{}';
+
+-- Add post_id column to swaps if it doesn't exist (for enriched swap info)
+ALTER TABLE public.swaps ADD COLUMN IF NOT EXISTS post_id uuid REFERENCES public.posts(id) ON DELETE SET NULL;
