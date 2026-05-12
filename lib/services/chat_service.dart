@@ -9,12 +9,14 @@ import '../models/profile_model.dart';
 class ChatService extends ChangeNotifier {
   List<ChatModel> _chats = [];
   List<MessageModel> _messages = [];
+  List<SwapModel> _userSwaps = [];
   bool _isLoading = false;
 
   RealtimeChannel? _messageChannel;
 
   List<ChatModel> get chats => _chats;
   List<MessageModel> get messages => _messages;
+  List<SwapModel> get userSwaps => _userSwaps;
   bool get isLoading => _isLoading;
 
   // ═════════════════════════════════════════════
@@ -265,20 +267,34 @@ class ChatService extends ChangeNotifier {
     if (userId == null) return null;
 
     try {
-      final insertData = {
-        'chat_id': chatId,
-        'initiator_id': userId,
-        'receiver_id': otherUserId,
-        'status': 'pending',
-      };
-      if (postId != null && postId.isNotEmpty) {
-        insertData['post_id'] = postId;
-      }
-      final data = await supabase
+      // Check if a swap already exists for this chat to avoid duplicates
+      final existing = await supabase
           .from('swaps')
-          .insert(insertData)
           .select()
-          .single();
+          .eq('chat_id', chatId)
+          .inFilter('status', ['pending', 'confirmed'])
+          .limit(1);
+
+      Map<String, dynamic> data;
+      if ((existing as List).isNotEmpty) {
+        // Swap already exists — reuse it and just ensure chat is updated
+        data = existing.first as Map<String, dynamic>;
+      } else {
+        final insertData = {
+          'chat_id': chatId,
+          'initiator_id': userId,
+          'receiver_id': otherUserId,
+          'status': 'pending',
+        };
+        if (postId != null && postId.isNotEmpty) {
+          insertData['post_id'] = postId;
+        }
+        data = await supabase
+            .from('swaps')
+            .insert(insertData)
+            .select()
+            .single();
+      }
 
       await supabase.from('chats').update({
         'swap_confirmed': true,
@@ -292,7 +308,10 @@ class ChatService extends ChangeNotifier {
         messageType: 'system',
       );
 
-      return SwapModel.fromJson(data);
+      final swapModel = SwapModel.fromJson(data);
+      // Refresh local swaps so Profile screen shows the new pending swap
+      await fetchUserSwaps();
+      return swapModel;
     } catch (e) {
       debugPrint('Error confirming swap: $e');
       return null;
@@ -322,6 +341,9 @@ class ChatService extends ChangeNotifier {
         content: '✅ Swap marked as completed! Rate your experience.',
         messageType: 'system',
       );
+
+      // Refresh the local swaps list so Profile screen updates reactively
+      await fetchUserSwaps();
 
       return true;
     } catch (e) {
@@ -421,6 +443,8 @@ class ChatService extends ChangeNotifier {
         ));
       }
 
+      _userSwaps = result;
+      notifyListeners();
       return result;
     } catch (e) {
       debugPrint('Error fetching swaps: $e');

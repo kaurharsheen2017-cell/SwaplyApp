@@ -25,6 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _isSending = false;
+  bool _isMarkingDone = false;
   // Local swap status — kept in sync with DB after every swap action
   late String _swapStatus;
 
@@ -45,7 +46,9 @@ class _ChatScreenState extends State<ChatScreen> {
           .select('swap_status')
           .eq('id', widget.chat.id)
           .single();
-      final status = data['swap_status'] as String? ?? 'none';
+      final raw = data['swap_status'] as String? ?? 'none';
+      // Normalise: both 'pending' and 'confirmed' show the Mark Done button
+      final status = (raw == 'confirmed') ? 'pending' : raw;
       if (mounted && status != _swapStatus) {
         setState(() => _swapStatus = status);
       }
@@ -208,19 +211,47 @@ class _ChatScreenState extends State<ChatScreen> {
     final textSec =
         isDark ? AppColors.darkTextSecondary : AppColors.textSecondary;
 
-    // Fetch only the pending swap for this specific chat
+    // Show a loading indicator while fetching the swap
     SwapModel? swap;
+    String? fetchError;
     try {
-      final data = await supabase
+      // Look for ANY active swap for this chat (pending or confirmed),
+      // regardless of who initiated it — both parties can mark it done.
+      final rows = await supabase
           .from('swaps')
           .select()
           .eq('chat_id', widget.chat.id)
-          .eq('status', 'pending')
-          .maybeSingle();
-      if (data != null) swap = SwapModel.fromJson(data as Map<String, dynamic>);
-    } catch (_) {}
+          .inFilter('status', ['pending', 'confirmed'])
+          .order('created_at', ascending: false)
+          .limit(1);
 
-    if (swap == null || swap.id.isEmpty || !mounted) return;
+      final list = rows as List;
+      if (list.isNotEmpty) {
+        swap = SwapModel.fromJson(list.first as Map<String, dynamic>);
+      }
+    } catch (e) {
+      fetchError = e.toString();
+    }
+
+    if (!mounted) return;
+
+    // If no swap record found, show a helpful error instead of silently failing
+    if (swap == null || swap.id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            fetchError != null
+                ? 'Could not load swap: $fetchError'
+                : 'No active swap found for this chat. Confirm the swap first.',
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -287,6 +318,16 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _onMarkDonePressed() async {
+    if (_isMarkingDone) return;
+    setState(() => _isMarkingDone = true);
+    try {
+      await _showCompleteSwapDialog();
+    } finally {
+      if (mounted) setState(() => _isMarkingDone = false);
     }
   }
 
@@ -441,12 +482,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     if (_swapStatus == 'pending')
                       TextButton.icon(
-                        onPressed: _showCompleteSwapDialog,
-                        icon: const Icon(
-                          Icons.check_circle_outline,
-                          color: Colors.white,
-                          size: 18,
-                        ),
+                        onPressed: _isMarkingDone ? null : _onMarkDonePressed,
+                        icon: _isMarkingDone
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.check_circle_outline,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                         label: const Text(
                           'Mark Done',
                           style: TextStyle(

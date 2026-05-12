@@ -78,7 +78,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return _swaps.where((s) => s.status == 'cancelled').toList();
   }
 
-  int get _completedCount => _swaps.where((s) => s.status == 'completed').length;
+  int get _completedCount {
+    final cs = context.read<ChatService>();
+    final live = cs.userSwaps.isNotEmpty ? cs.userSwaps : _swaps;
+    return live.where((s) => s.status == 'completed').length;
+  }
   int _points(int ts) => ts * 100;
 
   Future<void> _launchUrl(String url) async {
@@ -126,23 +130,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             //  Stats card INSIDE the header (Stack, bottom of gradient)
             // ══════════════════════════════════════════════════════════════
             SliverToBoxAdapter(
-              child: _ProfileHeader(
-                profile: profile,
-                name: name,
-                bio: bio,
-                isDark: isDark,
-                points: _points(totalSwaps),
-                totalSwaps: totalSwaps,
-                rating: rating,
-                completed: _completedCount,
-                cardBg: cardBg,
-                tPri: tPri,
-                tSec: tSec,
-                onSettings: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                onEdit: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const EditProfileScreen()))
-                  .then((_) => auth.fetchProfile()),
+              child: Consumer<ChatService>(
+                builder: (_, cs, __) {
+                  final liveCompleted = cs.userSwaps.isNotEmpty
+                      ? cs.userSwaps.where((s) => s.status == 'completed').length
+                      : _completedCount;
+                  return _ProfileHeader(
+                    profile: profile,
+                    name: name,
+                    bio: bio,
+                    isDark: isDark,
+                    points: _points(totalSwaps),
+                    totalSwaps: totalSwaps,
+                    rating: rating,
+                    completed: liveCompleted,
+                    cardBg: cardBg,
+                    tPri: tPri,
+                    tSec: tSec,
+                    onSettings: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                    onEdit: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const EditProfileScreen()))
+                      .then((_) => auth.fetchProfile()),
+                  );
+                },
               ),
             ),
 
@@ -202,17 +213,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
 
             // ══════════════════════════════════════════════════════════════
-            //  MY SWAPS
+            //  MY SWAPS  — Consumer so it rebuilds when ChatService notifies
             // ══════════════════════════════════════════════════════════════
             SliverToBoxAdapter(
-              child: _SwapsSection(
-                swaps: _filteredSwaps,
-                isLoading: _loadingSwaps,
-                activeTab: _swapTab,
-                onTab: (i) => setState(() => _swapTab = i),
-                isDark: isDark, cardBg: cardBg, tPri: tPri,
-                tSec: tSec, border: border,
-              ).animate().fadeIn(delay: 250.ms),
+              child: Consumer<ChatService>(
+                builder: (_, cs, __) {
+                  // Merge live swaps from ChatService if available
+                  final liveSwaps = cs.userSwaps.isNotEmpty ? cs.userSwaps : _swaps;
+                  List<SwapModel> filtered;
+                  if (_swapTab == 0) {
+                    filtered = liveSwaps
+                        .where((s) => s.status == 'pending' || s.status == 'confirmed')
+                        .toList();
+                  } else if (_swapTab == 1) {
+                    filtered = liveSwaps.where((s) => s.status == 'completed').toList();
+                  } else {
+                    filtered = liveSwaps.where((s) => s.status == 'cancelled').toList();
+                  }
+                  return _SwapsSection(
+                    swaps: filtered,
+                    isLoading: _loadingSwaps,
+                    activeTab: _swapTab,
+                    onTab: (i) => setState(() => _swapTab = i),
+                    isDark: isDark, cardBg: cardBg, tPri: tPri,
+                    tSec: tSec, border: border,
+                  ).animate().fadeIn(delay: 250.ms);
+                },
+              ),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 110)),
