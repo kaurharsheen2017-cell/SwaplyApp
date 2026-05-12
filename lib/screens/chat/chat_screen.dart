@@ -7,6 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../models/chat_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
+// SwapException is defined in chat_service.dart — imported above
 import '../../utils/app_theme.dart';
 import '../../widgets/avatar_widget.dart';
 import 'rate_swap_screen.dart';
@@ -180,25 +181,55 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     if (confirm == true && mounted) {
-      final swap = await context.read<ChatService>().confirmSwap(
-            chatId: widget.chat.id,
-            otherUserId: widget.chat.otherUser?.id ?? '',
-            postId: widget.chat.postId,
+      try {
+        final swap = await context.read<ChatService>().confirmSwap(
+              chatId: widget.chat.id,
+              otherUserId: widget.chat.otherUser?.id ?? '',
+              postId: widget.chat.postId,
+            );
+
+        if (swap != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Swap confirmed! 🎉'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
           );
 
-      if (swap != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Swap confirmed! 🎉'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+          setState(() => _swapStatus = 'pending');
+        }
+      } on SwapException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.message),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-          ),
-        );
-
-        setState(() => _swapStatus = 'pending');
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not confirm swap: $e'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
       }
     }
   }

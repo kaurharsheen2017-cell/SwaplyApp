@@ -257,6 +257,9 @@ class ChatService extends ChangeNotifier {
   // ═════════════════════════════════════════════
   // CONFIRM SWAP
   // ═════════════════════════════════════════════
+
+  /// Returns the [SwapModel] on success, or throws a [SwapException] with a
+  /// human-readable message on failure so the UI can surface it.
   Future<SwapModel?> confirmSwap({
     required String chatId,
     required String otherUserId,
@@ -264,10 +267,16 @@ class ChatService extends ChangeNotifier {
   }) async {
     final userId = supabase.auth.currentUser?.id;
 
-    if (userId == null) return null;
+    if (userId == null) {
+      throw SwapException('You must be logged in to confirm a swap.');
+    }
+
+    if (otherUserId.isEmpty) {
+      throw SwapException('Could not identify the other participant.');
+    }
 
     try {
-      // Check if a swap already exists for this chat to avoid duplicates
+      // ── 1. Check for an existing active swap to avoid duplicates ──────────
       final existing = await supabase
           .from('swaps')
           .select()
@@ -276,11 +285,13 @@ class ChatService extends ChangeNotifier {
           .limit(1);
 
       Map<String, dynamic> data;
+
       if ((existing as List).isNotEmpty) {
-        // Swap already exists — reuse it and just ensure chat is updated
+        // Swap already exists — reuse it
         data = existing.first as Map<String, dynamic>;
       } else {
-        final insertData = {
+        // ── 2. Insert a new swap row ───────────────────────────────────────
+        final insertData = <String, dynamic>{
           'chat_id': chatId,
           'initiator_id': userId,
           'receiver_id': otherUserId,
@@ -289,22 +300,32 @@ class ChatService extends ChangeNotifier {
         if (postId != null && postId.isNotEmpty) {
           insertData['post_id'] = postId;
         }
-        data = await supabase
+
+        final inserted = await supabase
             .from('swaps')
             .insert(insertData)
             .select()
-            .single();
+            .maybeSingle();
+
+        if (inserted == null) {
+          throw SwapException(
+            'Swap record could not be created. '
+            'Please check your database permissions.',
+          );
+        }
+        data = inserted;
       }
 
+      // ── 3. Update the chat's swap status ──────────────────────────────────
       await supabase.from('chats').update({
         'swap_confirmed': true,
         'swap_status': 'pending',
       }).eq('id', chatId);
 
+      // ── 4. Send a system message visible to both parties ──────────────────
       await sendMessage(
         chatId: chatId,
-        content:
-            '🤝 Swap confirmed! Waiting for completion.',
+        content: '🤝 Swap confirmed! Waiting for completion.',
         messageType: 'system',
       );
 
@@ -312,9 +333,25 @@ class ChatService extends ChangeNotifier {
       // Refresh local swaps so Profile screen shows the new pending swap
       await fetchUserSwaps();
       return swapModel;
+    } on SwapException {
+      rethrow; // Already a friendly error — let it bubble
+    } on PostgrestException catch (e) {
+      debugPrint('Supabase error confirming swap: ${e.message} | ${e.details}');
+      // Surface a readable message for common RLS / constraint errors
+      final msg = e.message.toLowerCase();
+      if (msg.contains('row-level security') || msg.contains('rls')) {
+        throw SwapException(
+          'Permission denied. Make sure the swaps table has the correct '
+          'RLS policies (see supabase_setup.sql).',
+        );
+      }
+      if (msg.contains('violates') || msg.contains('constraint')) {
+        throw SwapException('Database constraint error: ${e.message}');
+      }
+      throw SwapException('Database error: ${e.message}');
     } catch (e) {
       debugPrint('Error confirming swap: $e');
-      return null;
+      throw SwapException('Unexpected error: $e');
     }
   }
 
@@ -500,4 +537,16 @@ class ChatService extends ChangeNotifier {
       return [];
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+/// Thrown by [ChatService.confirmSwap] so callers can distinguish a swap
+/// failure from a generic exception and display a meaningful message.
+// ─────────────────────────────────────────────────────────────────────────────
+class SwapException implements Exception {
+  final String message;
+  const SwapException(this.message);
+
+  @override
+  String toString() => 'SwapException: $message';
 }

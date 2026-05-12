@@ -1,125 +1,55 @@
--- Run this script in your Supabase SQL Editor to fix the Profile and Avatar upload issues.
+-- ============================================================
+-- SwaplyApp — Fix "Could not find 'initiator_id' column"
+-- Run this in: Supabase Dashboard → SQL Editor → New Query
+-- ============================================================
 
--- ==========================================
--- 1. PROFILES TABLE & POLICIES
--- ==========================================
+-- ────────────────────────────────────────────────────────────
+-- 1. ADD MISSING COLUMNS TO EXISTING swaps TABLE
+--    (all use IF NOT EXISTS so it's safe to re-run)
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE public.swaps
+  ADD COLUMN IF NOT EXISTS chat_id      uuid REFERENCES public.chats(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS initiator_id uuid REFERENCES auth.users(id)   ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS receiver_id  uuid REFERENCES auth.users(id)   ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS post_id      uuid REFERENCES public.posts(id)  ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS status       text DEFAULT 'pending',
+  ADD COLUMN IF NOT EXISTS confirmed_at timestamp with time zone,
+  ADD COLUMN IF NOT EXISTS completed_at timestamp with time zone,
+  ADD COLUMN IF NOT EXISTS created_at   timestamp with time zone DEFAULT now();
 
--- Create the profiles table if it doesn't exist
-create table if not exists public.profiles (
-  id uuid references auth.users on delete cascade primary key,
-  username text not null,
-  full_name text,
-  avatar_url text,
-  bio text,
-  campus text,
-  skills_offered text[] default '{}',
-  links text[] default '{}',
-  skills_wanted text[] default '{}',
-  total_swaps integer default 0,
-  average_rating numeric default 0.0,
-  rating_count integer default 0,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone
-);
+-- ────────────────────────────────────────────────────────────
+-- 2. ENABLE RLS + POLICIES FOR swaps
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE public.swaps ENABLE ROW LEVEL SECURITY;
 
--- Enable Row Level Security (RLS) on profiles
-alter table public.profiles enable row level security;
+DROP POLICY IF EXISTS "Swap participants can view swaps"   ON public.swaps;
+DROP POLICY IF EXISTS "Initiator can create swaps"         ON public.swaps;
+DROP POLICY IF EXISTS "Swap participants can update swaps" ON public.swaps;
 
--- Policy: Allow public to view any profile
-create policy "Public profiles are viewable by everyone."
-on public.profiles for select
-using ( true );
+CREATE POLICY "Swap participants can view swaps"
+  ON public.swaps FOR SELECT
+  USING (auth.uid() = initiator_id OR auth.uid() = receiver_id);
 
--- Policy: Allow users to insert their own profile
-create policy "Users can insert their own profile."
-on public.profiles for insert
-with check ( auth.uid() = id );
+CREATE POLICY "Initiator can create swaps"
+  ON public.swaps FOR INSERT
+  WITH CHECK (auth.uid() = initiator_id);
 
--- Policy: Allow users to update their own profile
-create policy "Users can update own profile."
-on public.profiles for update
-using ( auth.uid() = id );
+CREATE POLICY "Swap participants can update swaps"
+  ON public.swaps FOR UPDATE
+  USING (auth.uid() = initiator_id OR auth.uid() = receiver_id);
 
+-- ────────────────────────────────────────────────────────────
+-- 3. NOTIFY POSTGREST TO RELOAD SCHEMA CACHE
+--    (this is what fixes the PGRST204 error directly)
+-- ────────────────────────────────────────────────────────────
+NOTIFY pgrst, 'reload schema';
 
--- ==========================================
--- 2. STORAGE (AVATARS BUCKET) POLICIES
--- ==========================================
+-- ────────────────────────────────────────────────────────────
+-- 4. ADD MISSING COLUMNS TO chats (safe if already exist)
+-- ────────────────────────────────────────────────────────────
+ALTER TABLE public.chats
+  ADD COLUMN IF NOT EXISTS swap_confirmed boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS swap_status    text    DEFAULT 'none',
+  ADD COLUMN IF NOT EXISTS post_id        uuid    REFERENCES public.posts(id) ON DELETE SET NULL;
 
--- (Assuming you already created the 'avatars' bucket in the dashboard)
-
--- Policy: Allow public access to view avatars
-create policy "Public Access"
-on storage.objects for select
-using ( bucket_id = 'avatars' );
-
--- Policy: Allow authenticated users to upload avatars
-create policy "Authenticated users can upload avatars"
-on storage.objects for insert
-with check ( auth.role() = 'authenticated' AND bucket_id = 'avatars' );
-
--- Policy: Allow users to update their own avatars
-create policy "Users can update their own avatars"
-on storage.objects for update
-using ( auth.uid() = owner AND bucket_id = 'avatars' );
-
--- Policy: Allow users to delete their own avatars
-create policy "Users can delete their own avatars"
-on storage.objects for delete
-using ( auth.uid() = owner AND bucket_id = 'avatars' );
-
-
--- ==========================================
--- 3. REPORTS AND BLOCKS (Safety Features)
--- ==========================================
-
--- User Reports
-create table if not exists public.user_reports (
-  id uuid default gen_random_uuid() primary key,
-  reporter_id uuid references auth.users(id) on delete cascade not null,
-  reported_id uuid references auth.users(id) on delete cascade not null,
-  reason text not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
-alter table public.user_reports enable row level security;
-
-create policy "Users can insert reports"
-on public.user_reports for insert
-with check ( auth.uid() = reporter_id );
-
-create policy "Users can view their own reports"
-on public.user_reports for select
-using ( auth.uid() = reporter_id );
-
--- User Blocks
-create table if not exists public.user_blocks (
-  id uuid default gen_random_uuid() primary key,
-  blocker_id uuid references auth.users(id) on delete cascade not null,
-  blocked_id uuid references auth.users(id) on delete cascade not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  unique(blocker_id, blocked_id)
-);
-
-alter table public.user_blocks enable row level security;
-
-create policy "Users can insert blocks"
-on public.user_blocks for insert
-with check ( auth.uid() = blocker_id );
-
-create policy "Users can view their own blocks"
-on public.user_blocks for select
-using ( auth.uid() = blocker_id );
-
-create policy "Users can delete their blocks"
-on public.user_blocks for delete
-using ( auth.uid() = blocker_id );
-
--- ==========================================
--- 4. ADD MISSING COLUMNS (safe migrations)
--- ==========================================
-
--- Add links column to profiles if it doesn't exist
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS links text[] DEFAULT '{}';
-
--- Add post_id column to swaps if it doesn't exist (for enriched swap info)
-ALTER TABLE public.swaps ADD COLUMN IF NOT EXISTS post_id uuid REFERENCES public.posts(id) ON DELETE SET NULL;
+NOTIFY pgrst, 'reload schema';
